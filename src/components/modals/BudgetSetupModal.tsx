@@ -7,11 +7,12 @@ interface BudgetSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (budget: Omit<Budget, 'id' | 'expenses'>) => void;
+  onDelete: (budgetId: string) => void;
   initialBudget?: Budget | null;
   allBudgets?: Budget[];
 }
 
-export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onClose, onSave, initialBudget, allBudgets }) => {
+export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onClose, onSave, onDelete, initialBudget, allBudgets }) => {
   const [name, setName] = useState('');
   const [year, setYear] = useState(new Date().getFullYear());
   const [categories, setCategories] = useState<Category[]>([{ id: `cat-${Date.now()}`, name: '', budgeted: 0 }]);
@@ -76,6 +77,16 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
         alert("Please provide a budget name and at least one category with a budget amount.");
     }
   };
+
+  const handleDelete = () => {
+    if (initialBudget) {
+      if (window.confirm(`Are you sure you want to permanently delete the budget "${initialBudget.name}"? All of its categories and expenses will be lost.`)) {
+        onDelete(initialBudget.id);
+        onClose();
+      }
+    }
+  };
+
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={initialBudget ? "Edit Budget" : "Create Budget"} size="lg">
@@ -145,9 +156,16 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
           </div>
           <Button onClick={addCategory} variant="secondary" className="mt-4">Add Category</Button>
         </div>
-        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-700">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleSave}>Save Budget</Button>
+        <div className="flex justify-between items-center pt-4 border-t border-slate-700">
+          <div>
+            {initialBudget && (
+              <Button variant="danger" onClick={handleDelete}>Delete Budget</Button>
+            )}
+          </div>
+          <div className="flex justify-end space-x-3">
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button onClick={handleSave}>{initialBudget ? 'Save Changes' : 'Save Budget'}</Button>
+          </div>
         </div>
       </div>
     </Modal>

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Budget, Expense, Category } from '../types';
 import { Dashboard } from './components/Dashboard';
@@ -89,6 +88,17 @@ const App: React.FC = () => {
     setBudgetToEdit(null);
   };
   
+  const handleDeleteBudget = (budgetId: string) => {
+    const newBudgets = budgets.filter(b => b.id !== budgetId);
+    let newActiveId = activeBudgetId;
+
+    if (activeBudgetId === budgetId) {
+        newActiveId = newBudgets.length > 0 ? newBudgets[0].id : null;
+    }
+    
+    saveBudgets(newBudgets, newActiveId);
+  };
+
   const handleAddExpenses = (newExpensesData: ExpenseData[]) => {
       if (!activeBudget) return;
 
@@ -189,6 +199,32 @@ const App: React.FC = () => {
     const updatedBudgets = budgets.map(b => b.id === activeBudgetId ? updatedBudget : b);
     saveBudgets(updatedBudgets);
   }
+
+  const handleDeleteExpensesInView = () => {
+    if (!activeBudget) return;
+
+    const months = ["Annual", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const viewName = viewMonth === 0 ? `the year ${activeBudget.year}` : `${months[viewMonth]} ${activeBudget.year}`;
+    
+    const expensesInView = viewMonth === 0 
+        ? activeBudget.expenses 
+        : activeBudget.expenses.filter(exp => new Date(exp.date).getUTCMonth() + 1 === viewMonth);
+
+    if (expensesInView.length === 0) {
+        alert(`There are no expenses to delete for ${viewName}.`);
+        return;
+    }
+
+    if (window.confirm(`Are you sure you want to delete all ${expensesInView.length} expense(s) for ${viewName}? This action cannot be undone.`)) {
+        const expensesToKeep = viewMonth === 0
+            ? [] // Delete all for annual view
+            : activeBudget.expenses.filter(exp => new Date(exp.date).getUTCMonth() + 1 !== viewMonth);
+        
+        const updatedBudget = { ...activeBudget, expenses: expensesToKeep };
+        const updatedBudgets = budgets.map(b => b.id === activeBudgetId ? updatedBudget : b);
+        saveBudgets(updatedBudgets);
+    }
+  };
   
   const handleEditBudget = () => {
     setBudgetToEdit(activeBudget);
@@ -293,6 +329,18 @@ const App: React.FC = () => {
                 }>
                     <DropdownItem onClick={() => importInputRef.current?.click()}>Import Data</DropdownItem>
                     <DropdownItem onClick={handleExportData}>Export Data</DropdownItem>
+                    <DropdownItem 
+                        onClick={handleDeleteExpensesInView}
+                        disabled={!activeBudget || activeBudget.expenses.length === 0}
+                        className={`
+                            ${(!activeBudget || activeBudget.expenses.length === 0) 
+                                ? 'text-slate-600 cursor-not-allowed' 
+                                : 'hover:bg-red-800/50 text-red-400 hover:text-red-300'
+                            }`
+                        }
+                    >
+                        Delete Expenses in View
+                    </DropdownItem>
                 </Dropdown>
 
             </div>
@@ -332,6 +380,7 @@ const App: React.FC = () => {
             setBudgetToEdit(null);
         }}
         onSave={handleSaveBudget}
+        onDelete={handleDeleteBudget}
         initialBudget={budgetToEdit}
         allBudgets={budgets}
       />
