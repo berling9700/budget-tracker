@@ -173,6 +173,22 @@ const App: React.FC = () => {
     const updatedBudgets = budgets.map(b => b.id === activeBudgetId ? updatedBudget : b);
     saveBudgets(updatedBudgets);
   }
+
+  const handleUpdateMultipleExpensesCategory = (expenseIds: string[], newCategoryId: string) => {
+    if (!activeBudget) return;
+    const expenseIdSet = new Set(expenseIds);
+
+    const updatedExpenses = activeBudget.expenses.map(exp => {
+        if (expenseIdSet.has(exp.id)) {
+            return { ...exp, categoryId: newCategoryId };
+        }
+        return exp;
+    });
+
+    const updatedBudget = { ...activeBudget, expenses: updatedExpenses };
+    const updatedBudgets = budgets.map(b => b.id === activeBudgetId ? updatedBudget : b);
+    saveBudgets(updatedBudgets);
+  }
   
   const handleEditBudget = () => {
     setBudgetToEdit(activeBudget);
@@ -292,6 +308,7 @@ const App: React.FC = () => {
                 onUpdateExpense={handleUpdateExpense} 
                 onDeleteExpense={handleDeleteExpense}
                 onDeleteMultipleExpenses={handleDeleteMultipleExpenses}
+                onUpdateMultipleExpensesCategory={handleUpdateMultipleExpensesCategory}
                 onEditBudget={handleEditBudget} 
               />
             </>

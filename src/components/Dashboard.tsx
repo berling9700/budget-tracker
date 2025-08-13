@@ -11,6 +11,7 @@ interface DashboardProps {
   onUpdateExpense: (expense: Expense) => void;
   onDeleteExpense: (expenseId: string) => void;
   onDeleteMultipleExpenses: (expenseIds: string[]) => void;
+  onUpdateMultipleExpensesCategory: (expenseIds: string[], newCategoryId: string) => void;
   onEditBudget: () => void;
 }
 
@@ -49,7 +50,7 @@ const CategoryRow: React.FC<{
   );
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ budget, viewMonth, onUpdateExpense, onDeleteExpense, onDeleteMultipleExpenses, onEditBudget }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ budget, viewMonth, onUpdateExpense, onDeleteExpense, onDeleteMultipleExpenses, onUpdateMultipleExpensesCategory, onEditBudget }) => {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
 
   const filteredExpenses = useMemo(() => {
@@ -184,6 +185,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ budget, viewMonth, onUpdat
         onUpdateExpense={onUpdateExpense}
         onDeleteExpense={onDeleteExpense}
         onDeleteMultipleExpenses={onDeleteMultipleExpenses}
+        onUpdateMultipleExpensesCategory={onUpdateMultipleExpensesCategory}
       />
     </div>
   );

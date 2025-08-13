@@ -116,7 +116,7 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
         </div>
         <div>
           <h3 className="text-lg font-semibold text-white mb-2">Categories</h3>
-          <div className="space-y-3 max-h-64 pr-2">
+          <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
             {categories.map((category, index) => (
               <div key={category.id} className="grid grid-cols-12 gap-2 items-center">
                 <input

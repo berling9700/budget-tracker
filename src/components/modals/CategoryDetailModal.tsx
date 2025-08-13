@@ -13,6 +13,7 @@ interface CategoryDetailModalProps {
   onUpdateExpense: (expense: Expense) => void;
   onDeleteExpense: (expenseId: string) => void;
   onDeleteMultipleExpenses: (expenseIds: string[]) => void;
+  onUpdateMultipleExpensesCategory: (expenseIds: string[], newCategoryId: string) => void;
 }
 
 const ExpenseRow: React.FC<{
@@ -53,7 +54,7 @@ const ExpenseRow: React.FC<{
                  <select value={editedExpense.categoryId} onChange={e => setEditedExpense({...editedExpense, categoryId: e.target.value})} className="col-span-2 bg-slate-600 rounded p-1 text-sm">
                     {allCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                 </select>
-                <div className="col-span-2 flex justify-end items-center gap-1">
+                <div className="col-span-2 flex justify-end items-center gap-1 pl-4">
                    <Button onClick={handleUpdate} size="sm">Save</Button>
                    <Button variant="secondary" onClick={() => setIsEditing(false)} size="sm">Cancel</Button>
                 </div>
@@ -88,12 +89,14 @@ const ExpenseRow: React.FC<{
 }
 
 
-export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen, onClose, category, allCategories, expenses, onUpdateExpense, onDeleteExpense, onDeleteMultipleExpenses }) => {
+export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen, onClose, category, allCategories, expenses, onUpdateExpense, onDeleteExpense, onDeleteMultipleExpenses, onUpdateMultipleExpensesCategory }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkChangeCategoryId, setBulkChangeCategoryId] = useState<string>('');
   
   useEffect(() => {
     if(isOpen) {
         setSelectedIds(new Set());
+        setBulkChangeCategoryId('');
     }
   }, [isOpen]);
 
@@ -127,6 +130,18 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
         onDeleteMultipleExpenses(Array.from(selectedIds));
         setSelectedIds(new Set());
     }
+  };
+
+  const handleChangeSelectedCategory = () => {
+    if (!bulkChangeCategoryId) {
+      alert("Please select a category to move the expenses to.");
+      return;
+    }
+    if (selectedIds.size === 0) return;
+
+    onUpdateMultipleExpensesCategory(Array.from(selectedIds), bulkChangeCategoryId);
+    setSelectedIds(new Set());
+    setBulkChangeCategoryId('');
   };
 
   const isAllSelected = expenses.length > 0 && selectedIds.size === expenses.length;
@@ -187,11 +202,29 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
           )}
         </div>
         <div className="flex justify-between items-center pt-4 border-t border-slate-700">
-            <div>
+            <div className="flex items-center gap-4 flex-wrap">
                  {selectedIds.size > 0 && (
-                    <Button variant="danger" onClick={handleDeleteSelected}>
-                        Delete Selected ({selectedIds.size})
-                    </Button>
+                    <>
+                        <Button variant="danger" onClick={handleDeleteSelected}>
+                            Delete Selected ({selectedIds.size})
+                        </Button>
+                        <div className="flex items-center gap-2">
+                             <select
+                                value={bulkChangeCategoryId}
+                                onChange={e => setBulkChangeCategoryId(e.target.value)}
+                                className="bg-slate-600 border-slate-500 text-white rounded-md p-2 h-10 text-sm"
+                                aria-label="Change category for selected expenses"
+                            >
+                                <option value="" disabled>Change category to...</option>
+                                {allCategories.filter(c => c.id !== category.id).map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                ))}
+                            </select>
+                            <Button variant="secondary" onClick={handleChangeSelectedCategory} disabled={!bulkChangeCategoryId}>
+                                Apply
+                            </Button>
+                        </div>
+                    </>
                  )}
             </div>
             <Button onClick={onClose}>Close</Button>
