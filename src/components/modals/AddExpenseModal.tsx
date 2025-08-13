@@ -4,6 +4,7 @@ import { Expense, Category } from '../../../types';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { parseCsvExpenses, ParsedExpenseData } from '../../services/geminiService';
+import { Spinner } from '../ui/Spinner';
 
 type ExpenseToReview = Partial<Omit<Expense, 'id'>> & { categoryName?: string };
 
@@ -30,6 +31,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
   const [parsedExpenses, setParsedExpenses] = useState<ExpenseToReview[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
 
   useEffect(() => {
@@ -44,6 +46,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       setParsedExpenses([]);
       setError('');
       setIsLoading(false);
+      setIsFullScreen(false);
     }
   }, [isOpen, categories]);
   
@@ -139,8 +142,35 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     setParsedExpenses(newExpenses);
   }
 
+  const headerActions = (
+    <button onClick={() => setIsFullScreen(!isFullScreen)} className="text-slate-400 hover:text-white transition-colors" aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}>
+        {isFullScreen ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="10" y1="14" x2="3" y2="21"></line>
+            </svg>
+        ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+        )}
+    </button>
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add Expenses" size={mode === 'bulk' ? 'xl' : 'md'}>
+    <Modal 
+        isOpen={isOpen} 
+        onClose={onClose} 
+        title="Add Expenses" 
+        size={mode === 'bulk' ? 'xl' : 'md'}
+        isFullScreen={mode === 'bulk' && isFullScreen}
+        headerActions={mode === 'bulk' ? headerActions : undefined}
+    >
         <div className="mb-4 border-b border-slate-700">
             <nav className="flex space-x-2">
                 <button onClick={() => setMode('single')} className={`px-4 py-2 text-sm font-medium rounded-t-lg ${mode === 'single' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
@@ -178,21 +208,30 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Upload CSV File</label>
-              <input type="file" accept=".csv" onChange={handleFileChange} className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"/>
+        <div className={isFullScreen ? 'flex flex-col h-full space-y-4' : 'space-y-4'}>
+            <div className={isFullScreen ? 'flex-shrink-0' : ''}>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Upload CSV File</label>
+                  <input type="file" accept=".csv" onChange={handleFileChange} className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"/>
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button onClick={handleParse} disabled={isLoading || !csvContent.trim()}>
+                    {isLoading ? (
+                      <span className="flex items-center">
+                        <Spinner size="sm" className="mr-2" />
+                        Parsing...
+                      </span>
+                    ) : 'Parse CSV'}
+                  </Button>
+                </div>
             </div>
-            <div className="flex justify-end">
-              <Button onClick={handleParse} disabled={isLoading || !csvContent.trim()}>
-                {isLoading ? 'Parsing with AI...' : 'Parse CSV'}
-              </Button>
-            </div>
-            {error && <p className="text-red-500 text-center">{error}</p>}
+
+            {error && <p className={`text-red-500 text-center ${isFullScreen ? 'flex-shrink-0' : ''}`}>{error}</p>}
+
             {parsedExpenses.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-slate-700">
-                <h3 className="text-lg font-semibold text-white">Review Parsed Expenses</h3>
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+              <div className={`pt-4 border-t border-slate-700 ${isFullScreen ? 'flex-grow overflow-hidden flex flex-col space-y-3' : 'space-y-3'}`}>
+                <h3 className="text-lg font-semibold text-white flex-shrink-0">Review Parsed Expenses</h3>
+                <div className={`space-y-2 pr-2 overflow-y-auto ${isFullScreen ? 'flex-grow' : 'max-h-60'}`}>
                   {parsedExpenses.map((exp, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-center bg-slate-900/50 p-2 rounded-md">
                        <input type="text" value={exp.name || ''} onChange={e => handleExpenseChange(index, 'name', e.target.value)} className="col-span-4 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
@@ -209,7 +248,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
                     </div>
                   ))}
                 </div>
-                 <div className="flex justify-end space-x-3 pt-4 border-t border-slate-700">
+                 <div className={`flex justify-end space-x-3 pt-4 border-t border-slate-700 ${isFullScreen ? 'flex-shrink-0' : ''}`}>
                     <Button variant="secondary" onClick={onClose}>Cancel</Button>
                     <Button onClick={handleBulkSave}>Add All to Budget</Button>
                 </div>

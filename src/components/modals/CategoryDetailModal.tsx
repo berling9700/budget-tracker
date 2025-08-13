@@ -92,11 +92,13 @@ const ExpenseRow: React.FC<{
 export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen, onClose, category, allCategories, expenses, onUpdateExpense, onDeleteExpense, onDeleteMultipleExpenses, onUpdateMultipleExpensesCategory }) => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkChangeCategoryId, setBulkChangeCategoryId] = useState<string>('');
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   useEffect(() => {
     if(isOpen) {
         setSelectedIds(new Set());
         setBulkChangeCategoryId('');
+        setIsFullScreen(false); // Reset on open
     }
   }, [isOpen]);
 
@@ -146,10 +148,37 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
 
   const isAllSelected = expenses.length > 0 && selectedIds.size === expenses.length;
 
+  const headerActions = (
+    <button onClick={() => setIsFullScreen(!isFullScreen)} className="text-slate-400 hover:text-white transition-colors" aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}>
+        {isFullScreen ? (
+             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="10" y1="14" x2="3" y2="21"></line>
+            </svg>
+        ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+        )}
+    </button>
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Details for ${category.name}`} size="lg">
-      <div className="space-y-4">
-        <div className="bg-slate-700/50 p-4 rounded-lg flex justify-between items-center">
+    <Modal 
+        isOpen={isOpen} 
+        onClose={onClose} 
+        title={`Details for ${category.name}`} 
+        size="lg"
+        isFullScreen={isFullScreen}
+        headerActions={headerActions}
+    >
+      <div className={isFullScreen ? 'flex flex-col h-full space-y-4' : 'space-y-4'}>
+        <div className="bg-slate-700/50 p-4 rounded-lg flex justify-between items-center flex-shrink-0">
             <div>
                 <div className="text-slate-400 text-sm">Total Budgeted</div>
                 <div className="text-2xl font-bold text-white">${category.budgeted.toFixed(2)}</div>
@@ -166,7 +195,7 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
             </div>
         </div>
         
-        <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2">
+        <div className={`space-y-2 pr-2 ${isFullScreen ? 'flex-grow overflow-y-auto' : 'max-h-[50vh] overflow-y-auto'}`}>
             <div className="grid grid-cols-12 gap-2 items-center p-2 text-slate-400 font-semibold text-sm border-b border-slate-700">
                 <div className="col-span-1 flex justify-center">
                     <input 
@@ -201,7 +230,7 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
             <p className="text-center text-slate-500 py-8">No expenses in this category yet.</p>
           )}
         </div>
-        <div className="flex justify-between items-center pt-4 border-t border-slate-700">
+        <div className="flex justify-between items-center pt-4 border-t border-slate-700 flex-shrink-0">
             <div className="flex items-center gap-4 flex-wrap">
                  {selectedIds.size > 0 && (
                     <>

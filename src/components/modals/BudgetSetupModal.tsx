@@ -18,6 +18,7 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
   const [year, setYear] = useState(new Date().getFullYear());
   const [categories, setCategories] = useState<Category[]>([{ id: `cat-${Date.now()}`, name: '', budgeted: 0 }]);
   const [copyFromBudgetId, setCopyFromBudgetId] = useState('');
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   const resetForm = (budget?: Budget | null) => {
     setName(budget?.name || `${new Date().getFullYear()} Budget`);
@@ -29,6 +30,7 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
   useEffect(() => {
     if (isOpen) {
         resetForm(initialBudget);
+        setIsFullScreen(false);
     }
   }, [isOpen, initialBudget]);
 
@@ -90,47 +92,69 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
     }
   };
 
+  const headerActions = (
+    <button onClick={() => setIsFullScreen(!isFullScreen)} className="text-slate-400 hover:text-white transition-colors" aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}>
+        {isFullScreen ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="10" y1="14" x2="3" y2="21"></line>
+            </svg>
+        ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+        )}
+    </button>
+  );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialBudget ? "Edit Budget" : "Create Budget"} size="lg">
-      <div className="space-y-6">
-        {!initialBudget && allBudgets && allBudgets.length > 0 && (
-            <div>
-                 <label className="block text-sm font-medium text-slate-400 mb-1">Copy from existing budget?</label>
-                 <select
-                    value={copyFromBudgetId}
-                    onChange={e => setCopyFromBudgetId(e.target.value)}
-                    className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
-                 >
-                    <option value="">Start with a blank budget</option>
-                    {allBudgets.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                 </select>
+    <Modal isOpen={isOpen} onClose={onClose} title={initialBudget ? "Edit Budget" : "Create Budget"} size="lg" isFullScreen={isFullScreen} headerActions={headerActions}>
+      <div className={isFullScreen ? 'flex flex-col h-full space-y-4' : 'space-y-6'}>
+        <div className={isFullScreen ? 'flex-shrink-0' : ''}>
+          {!initialBudget && allBudgets && allBudgets.length > 0 && (
+              <div className="mb-6">
+                   <label className="block text-sm font-medium text-slate-400 mb-1">Copy from existing budget?</label>
+                   <select
+                      value={copyFromBudgetId}
+                      onChange={e => setCopyFromBudgetId(e.target.value)}
+                      className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
+                   >
+                      <option value="">Start with a blank budget</option>
+                      {allBudgets.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                   </select>
+              </div>
+          )}
+          <div className="grid grid-cols-2 gap-4">
+             <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Budget Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
+                placeholder="e.g., 2024 Personal Budget"
+              />
             </div>
-        )}
-        <div className="grid grid-cols-2 gap-4">
-           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Budget Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
-              placeholder="e.g., 2024 Personal Budget"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Year</label>
-            <input
-              type="number"
-              value={year}
-              onChange={e => setYear(parseInt(e.target.value))}
-              className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
-            />
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-1">Year</label>
+              <input
+                type="number"
+                value={year}
+                onChange={e => setYear(parseInt(e.target.value))}
+                className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
+              />
+            </div>
           </div>
         </div>
-        <div>
-          <h3 className="text-lg font-semibold text-white mb-2">Categories</h3>
-          <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
+
+        <div className={isFullScreen ? 'flex-grow overflow-hidden flex flex-col' : ''}>
+          <h3 className="text-lg font-semibold text-white mb-2 flex-shrink-0">Categories</h3>
+          <div className={`space-y-3 pr-2 overflow-y-auto ${isFullScreen ? 'flex-grow' : 'max-h-64'}`}>
             {categories.map((category, index) => (
               <div key={category.id} className="grid grid-cols-12 gap-2 items-center">
                 <input
@@ -157,9 +181,10 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
               </div>
             ))}
           </div>
-          <Button onClick={addCategory} variant="secondary" className="mt-4">Add Category</Button>
+          <Button onClick={addCategory} variant="secondary" className="mt-4 flex-shrink-0">Add Category</Button>
         </div>
-        <div className="flex justify-between items-center pt-4 border-t border-slate-700">
+
+        <div className={`flex justify-between items-center pt-4 border-t border-slate-700 ${isFullScreen ? 'flex-shrink-0' : ''}`}>
           <div>
             {initialBudget && (
               <Button variant="danger" onClick={handleDelete}>Delete Budget</Button>

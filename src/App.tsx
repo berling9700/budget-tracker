@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Budget, Expense, Category } from '../types';
 import { Dashboard } from './components/Dashboard';
@@ -5,6 +6,7 @@ import { BudgetSetupModal } from './components/modals/BudgetSetupModal';
 import { AddExpenseModal } from './components/modals/AddExpenseModal';
 import { Button } from './components/ui/Button';
 import { Dropdown, DropdownItem } from './components/ui/Dropdown';
+import { Spinner } from './components/ui/Spinner';
 
 type ModalType = 'setup' | 'addExpense' | null;
 type ExpenseData = Omit<Expense, 'id' | 'categoryId'> & { categoryId?: string; categoryName?: string };
@@ -279,7 +281,8 @@ const App: React.FC = () => {
 
   if (isLoading) {
     return (
-        <div className="flex justify-center items-center h-screen">
+        <div className="flex flex-col justify-center items-center h-screen bg-slate-900 space-y-4">
+            <Spinner size="lg" />
             <div className="text-2xl text-slate-400">Loading Budgets...</div>
         </div>
     );
