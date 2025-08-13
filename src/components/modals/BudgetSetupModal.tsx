@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Budget, Category } from '../../../types';
 import { Button } from '../ui/Button';
@@ -65,7 +66,9 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
   };
 
   const handleSave = () => {
-    const finalCategories = categories.filter(c => c.name.trim() !== '' && c.budgeted > 0);
+    // A category is valid as long as it has a name. A budget of 0 is allowed.
+    // This prevents deleting categories like 'Other' which may hold expenses but have no budgeted amount.
+    const finalCategories = categories.filter(c => c.name.trim() !== '');
     if (finalCategories.length > 0 && name.trim()) {
         onSave({
             name,
@@ -74,7 +77,7 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
         });
         onClose();
     } else {
-        alert("Please provide a budget name and at least one category with a budget amount.");
+        alert("Please provide a budget name and at least one category.");
     }
   };
 
