@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Budget, Expense, Category } from './types';
+import { Budget, Expense, Category } from '../types';
 import { Dashboard } from './components/Dashboard';
 import { BudgetSetupModal } from './components/modals/BudgetSetupModal';
 import { AddExpenseModal } from './components/modals/AddExpenseModal';
@@ -164,6 +165,15 @@ const App: React.FC = () => {
     }
   }
   
+  const handleDeleteMultipleExpenses = (expenseIds: string[]) => {
+    if(!activeBudget) return;
+    const expenseIdSet = new Set(expenseIds);
+    const updatedExpenses = activeBudget.expenses.filter(exp => !expenseIdSet.has(exp.id));
+    const updatedBudget = {...activeBudget, expenses: updatedExpenses};
+    const updatedBudgets = budgets.map(b => b.id === activeBudgetId ? updatedBudget : b);
+    saveBudgets(updatedBudgets);
+  }
+  
   const handleEditBudget = () => {
     setBudgetToEdit(activeBudget);
     setActiveModal('setup');
@@ -281,6 +291,7 @@ const App: React.FC = () => {
                 viewMonth={viewMonth} 
                 onUpdateExpense={handleUpdateExpense} 
                 onDeleteExpense={handleDeleteExpense}
+                onDeleteMultipleExpenses={handleDeleteMultipleExpenses}
                 onEditBudget={handleEditBudget} 
               />
             </>

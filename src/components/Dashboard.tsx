@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Budget, Category, Expense } from '../../types';
@@ -9,6 +10,7 @@ interface DashboardProps {
   viewMonth: number; // 0 for Annual, 1-12 for months
   onUpdateExpense: (expense: Expense) => void;
   onDeleteExpense: (expenseId: string) => void;
+  onDeleteMultipleExpenses: (expenseIds: string[]) => void;
   onEditBudget: () => void;
 }
 
@@ -47,7 +49,7 @@ const CategoryRow: React.FC<{
   );
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ budget, viewMonth, onUpdateExpense, onDeleteExpense, onEditBudget }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ budget, viewMonth, onUpdateExpense, onDeleteExpense, onDeleteMultipleExpenses, onEditBudget }) => {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
 
   const filteredExpenses = useMemo(() => {
@@ -177,9 +179,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ budget, viewMonth, onUpdat
         isOpen={!!selectedCategory}
         onClose={handleCloseDetailModal}
         category={adjustedSelectedCategory}
+        allCategories={budget.categories}
         expenses={selectedCategoryExpenses}
         onUpdateExpense={onUpdateExpense}
         onDeleteExpense={onDeleteExpense}
+        onDeleteMultipleExpenses={onDeleteMultipleExpenses}
       />
     </div>
   );

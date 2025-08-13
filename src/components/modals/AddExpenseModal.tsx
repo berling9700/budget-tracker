@@ -90,7 +90,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
               date: exp.date,
               categoryId: category?.id,
               // Keep the original name if we couldn't find a category, so we can create it later.
-              categoryName: category ? undefined : exp.categoryName,
+              categoryName: exp.categoryName,
           };
       });
       setParsedExpenses(expensesToReview);
@@ -135,10 +135,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
   const handleExpenseChange = <T,>(index: number, field: keyof ExpenseToReview, value: T) => {
     const newExpenses = [...parsedExpenses];
     const newExpense = { ...newExpenses[index], [field]: value };
-    // if categoryId is changed, clear categoryName
-    if (field === 'categoryId') {
-        newExpense.categoryName = undefined;
-    }
     newExpenses[index] = newExpense;
     setParsedExpenses(newExpenses);
   }
@@ -203,16 +199,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
                        <input type="number" value={exp.amount || ''} onChange={e => handleExpenseChange(index, 'amount', parseFloat(e.target.value))} className="col-span-2 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
                        <input type="date" value={exp.date ? new Date(exp.date).toLocaleDateString('en-CA') : ''} onChange={e => handleExpenseChange(index, 'date', e.target.value)} className="col-span-3 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
                        <div className="col-span-3">
-                        { exp.categoryName && !exp.categoryId ? (
-                            <div className="bg-slate-700 text-white rounded-md p-2 text-sm text-center italic">
-                                {exp.categoryName}
-                            </div>
-                        ) : (
                            <select value={exp.categoryId || ''} onChange={e => handleExpenseChange(index, 'categoryId', e.target.value)} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm">
-                               <option value="">Select Category</option>
+                               <option value="">
+                                 {exp.categoryName && !exp.categoryId ? `New: ${exp.categoryName}` : 'Select Category'}
+                               </option>
                                {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                            </select>
-                        )}
                        </div>
                     </div>
                   ))}
