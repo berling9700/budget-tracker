@@ -13,7 +13,7 @@ interface NetWorthDashboardProps {
     activeBudget: Budget | undefined;
 }
 
-const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe', '#00c49f'];
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe', '#00c49f', '#ffbb28', '#ff82a9', '#a2d2ff'];
 
 const LiabilityRow: React.FC<{ liability: Liability, onEdit: () => void, onDelete: () => void }> = ({ liability, onEdit, onDelete }) => (
     <div className="flex justify-between items-center p-3 hover:bg-slate-700/50 rounded-lg">
@@ -45,12 +45,24 @@ export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, li
             return sum + (asset.value || 0);
         }, 0);
         
-        const assetAllocationData = assets.map(asset => {
-            const value = asset.holdings 
-                ? asset.holdings.reduce((hSum, h) => hSum + h.shares * h.currentPrice, 0)
-                : (asset.value || 0);
-            return { name: asset.name, value };
-        }).filter(d => d.value > 0);
+        const allocationMap = new Map<string, number>();
+        assets.forEach(asset => {
+            if (asset.holdings) {
+                asset.holdings.forEach(holding => {
+                    const value = holding.shares * holding.currentPrice;
+                    const key = holding.ticker || 'Unknown Ticker';
+                    allocationMap.set(key, (allocationMap.get(key) || 0) + value);
+                });
+            } else if (asset.value) {
+                const key = asset.name;
+                allocationMap.set(key, (allocationMap.get(key) || 0) + asset.value);
+            }
+        });
+
+        const assetAllocationData = Array.from(allocationMap.entries()).map(([name, value]) => ({
+            name,
+            value
+        })).filter(d => d.value > 0);
 
         const totalLiabilities = liabilities.reduce((sum, l) => sum + l.amount, 0);
         const netWorth = totalAssets - totalLiabilities;
@@ -128,7 +140,7 @@ export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, li
                 </div>
 
                 <div className="bg-slate-800 p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-white mb-4">Asset Allocation</h3>
+                    <h3 className="text-xl font-bold text-white mb-4">Portfolio Allocation</h3>
                      {assetAllocationData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={300}>
                             <PieChart>
@@ -139,7 +151,7 @@ export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, li
                                 <Legend />
                             </PieChart>
                         </ResponsiveContainer>
-                     ) : <p className="text-center h-[300px] flex items-center justify-center text-slate-500">Add assets to see your asset allocation.</p>}
+                     ) : <p className="text-center h-[300px] flex items-center justify-center text-slate-500">Add assets to see your portfolio allocation.</p>}
                 </div>
                 
                 {/* Liabilities List */}

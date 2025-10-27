@@ -16,7 +16,6 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
   const [ticker, setTicker] = useState('');
   const [name, setName] = useState('');
   const [shares, setShares] = useState('');
-  const [purchasePrice, setPurchasePrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
   const [isFetching, setIsFetching] = useState(false);
   const [fetchError, setFetchError] = useState('');
@@ -26,7 +25,6 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
       setTicker(initialData?.ticker || '');
       setName(initialData?.name || '');
       setShares(initialData?.shares.toString() || '');
-      setPurchasePrice(initialData?.purchasePrice.toString() || '');
       setCurrentPrice(initialData?.currentPrice.toString() || '');
       setFetchError('');
     } else {
@@ -34,7 +32,6 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
       setTicker('');
       setName('');
       setShares('');
-      setPurchasePrice('');
       setCurrentPrice('');
     }
   }, [isOpen, initialData]);
@@ -58,15 +55,23 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
 
   const handleSave = () => {
     const sharesNum = parseFloat(shares);
-    const purchasePriceNum = parseFloat(purchasePrice);
     const currentPriceNum = parseFloat(currentPrice);
 
-    if (!ticker.trim() || !name.trim() || isNaN(sharesNum) || isNaN(purchasePriceNum) || isNaN(currentPriceNum) || sharesNum <= 0) {
+    if (!ticker.trim() || !name.trim() || isNaN(sharesNum) || isNaN(currentPriceNum) || sharesNum <= 0) {
       alert("Please fill out all fields with valid numbers.");
       return;
     }
     
-    onSave({ ticker: ticker.toUpperCase().trim(), name, shares: sharesNum, purchasePrice: purchasePriceNum, currentPrice: currentPriceNum });
+    // If editing, preserve the original purchase price. If new, set it to the current price.
+    const purchasePriceToSave = initialData?.purchasePrice ?? currentPriceNum;
+
+    onSave({ 
+        ticker: ticker.toUpperCase().trim(), 
+        name, 
+        shares: sharesNum, 
+        purchasePrice: purchasePriceToSave, 
+        currentPrice: currentPriceNum 
+    });
     onClose();
   };
 
@@ -89,14 +94,10 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
             </div>
         </div>
         {fetchError && <p className="text-red-500 text-sm col-span-2 -mt-2">{fetchError}</p>}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 gap-4">
              <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Shares</label>
               <input type="number" value={shares} onChange={e => setShares(e.target.value)} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="0.00" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Avg. Purchase Price ($)</label>
-              <input type="number" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="0.00" />
             </div>
              <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Current Price ($)</label>
