@@ -9,10 +9,10 @@ export interface TickerQuote {
 
 const getApiKey = (): string | null => {
     try {
-        if (!process.env.API_KEY) {
-          console.warn("API_KEY environment variable not set. AI features will be disabled.");
+        if (!process.env.ALPHA_API_KEY) {
+          console.warn("ALPHA_API_KEY environment variable not set. AI features will be disabled.");
         } 
-        return process.env.API_KEY;
+        return process.env.ALPHA_API_KEY;
     } catch (e) {
         console.error("Could not parse settings", e);
     }

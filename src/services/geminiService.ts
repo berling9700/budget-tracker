@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Category } from '../types';
+import { Category } from '../../types';
 
 if (!process.env.API_KEY) {
   console.warn("API_KEY environment variable not set. AI features will be disabled.");
