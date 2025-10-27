@@ -1,7 +1,7 @@
+
 import React, { useState, useMemo } from 'react';
-import { InvestmentAccount, Holding } from '../../types';
+import { Asset, Holding } from '../../types';
 import { Button } from './ui/Button';
-import { AddInvestmentAccountModal } from './modals/AddInvestmentAccountModal';
 import { AddHoldingModal } from './modals/AddHoldingModal';
 import { Spinner } from './ui/Spinner';
 
@@ -39,31 +39,44 @@ const HoldingRow: React.FC<{
     );
 }
 
-const InvestmentAccountCard: React.FC<{
-    account: InvestmentAccount,
-    onEditAccount: () => void,
-    onDeleteAccount: () => void,
+const AssetAccountCard: React.FC<{
+    asset: Asset,
+    onEditAsset: () => void,
+    onDeleteAsset: () => void,
     onAddHolding: () => void,
     onEditHolding: (holding: Holding) => void,
     onDeleteHolding: (holdingId: string) => void,
 }> = (props) => {
-    const { account, onEditAccount, onDeleteAccount, onAddHolding, onEditHolding, onDeleteHolding } = props;
-    const totalValue = account.holdings.reduce((sum, h) => sum + h.shares * h.currentPrice, 0);
+    const { asset, onEditAsset, onDeleteAsset, onAddHolding, onEditHolding, onDeleteHolding } = props;
+    const totalValue = asset.holdings?.reduce((sum, h) => sum + h.shares * h.currentPrice, 0) || 0;
 
     return (
         <div className="bg-slate-800 rounded-xl shadow-lg overflow-hidden">
-            <div className="p-4 bg-slate-800/80 flex justify-between items-center">
+            <div className="p-4 bg-slate-800/80 flex justify-between items-center flex-wrap gap-2">
                 <div>
-                    <h3 className="text-xl font-bold text-white">{account.name} <span className="text-sm font-normal text-slate-400 ml-2">{account.type}</span></h3>
+                    <h3 className="text-xl font-bold text-white">{asset.name} <span className="text-sm font-normal text-slate-400 ml-2">{asset.type}</span></h3>
                     <p className="text-2xl font-mono text-purple-400">${totalValue.toFixed(2)}</p>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="secondary" onClick={onEditAccount}>Edit</Button>
-                    <Button variant="danger" onClick={onDeleteAccount}>Delete</Button>
-                    <Button onClick={onAddHolding}>Add Holding</Button>
+                    <Button variant="ghost" size="icon-md" onClick={onEditAsset} aria-label="Edit Asset">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                            <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+                        </svg>
+                    </Button>
+                    <Button variant="danger" size="icon-md" onClick={onDeleteAsset} aria-label="Delete Asset">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                           <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+                        </svg>
+                    </Button>
+                    <Button size="icon-md" onClick={onAddHolding} aria-label="Add Holding">
+                       <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                       </svg>
+                    </Button>
                 </div>
             </div>
-            {account.holdings.length > 0 ? (
+            {asset.holdings && asset.holdings.length > 0 ? (
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-900/50 text-xs text-slate-400 uppercase tracking-wider">
@@ -79,7 +92,7 @@ const InvestmentAccountCard: React.FC<{
                             </tr>
                         </thead>
                         <tbody>
-                            {account.holdings.map(h => (
+                            {asset.holdings.map(h => (
                                 <HoldingRow
                                     key={h.id}
                                     holding={h}
@@ -97,140 +110,141 @@ const InvestmentAccountCard: React.FC<{
     )
 }
 
-interface InvestmentsDashboardProps {
-  accounts: InvestmentAccount[];
-  onSaveAccounts: (accounts: InvestmentAccount[]) => void;
+const AssetValueCard: React.FC<{
+    asset: Asset,
+    onEdit: () => void,
+    onDelete: () => void,
+}> = ({ asset, onEdit, onDelete }) => {
+    return (
+        <div className="bg-slate-800 rounded-xl shadow-lg p-4 flex justify-between items-center">
+            <div>
+                <h3 className="text-xl font-bold text-white">{asset.name} <span className="text-sm font-normal text-slate-400 ml-2">{asset.type}</span></h3>
+                <p className="text-2xl font-mono text-purple-400">${(asset.value || 0).toFixed(2)}</p>
+            </div>
+            <div className="flex gap-2">
+                 <Button variant="ghost" size="icon-md" onClick={onEdit} aria-label="Edit Asset">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                        <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+                    </svg>
+                 </Button>
+                 <Button variant="danger" size="icon-md" onClick={onDelete} aria-label="Delete Asset">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
+                    </svg>
+                 </Button>
+            </div>
+        </div>
+    );
+};
+
+interface AssetsDashboardProps {
+  assets: Asset[];
+  onSaveAssets: (assets: Asset[]) => void;
+  onEditAsset: (asset: Asset) => void;
 }
 
-export const InvestmentsDashboard: React.FC<InvestmentsDashboardProps> = ({ accounts, onSaveAccounts }) => {
-    const [accountModalOpen, setAccountModalOpen] = useState(false);
+export const AssetsDashboard: React.FC<AssetsDashboardProps> = ({ assets, onSaveAssets, onEditAsset }) => {
     const [holdingModalOpen, setHoldingModalOpen] = useState(false);
-    const [editingAccount, setEditingAccount] = useState<InvestmentAccount | null>(null);
     const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
-    const [accountForNewHolding, setAccountForNewHolding] = useState<InvestmentAccount | null>(null);
+    const [assetForNewHolding, setAssetForNewHolding] = useState<Asset | null>(null);
 
-    const { totalValue, totalCost, totalGainLoss } = useMemo(() => {
-        let totalValue = 0;
-        let totalCost = 0;
-        accounts.forEach(acc => {
-            acc.holdings.forEach(h => {
-                totalValue += h.shares * h.currentPrice;
-                totalCost += h.shares * h.purchasePrice;
-            })
-        });
-        return { totalValue, totalCost, totalGainLoss: totalValue - totalCost };
-    }, [accounts]);
+    const totalValue = useMemo(() => {
+        return assets.reduce((total, asset) => {
+            if (asset.holdings) {
+                return total + asset.holdings.reduce((sum, h) => sum + h.shares * h.currentPrice, 0);
+            }
+            return total + (asset.value || 0);
+        }, 0);
+    }, [assets]);
 
-    const handleSaveAccount = (accountData: Omit<InvestmentAccount, 'id' | 'holdings'>) => {
-        if (editingAccount) {
-            const updatedAccounts = accounts.map(acc => acc.id === editingAccount.id ? { ...acc, ...accountData } : acc);
-            onSaveAccounts(updatedAccounts);
-        } else {
-            const newAccount: InvestmentAccount = { ...accountData, id: `invacc-${Date.now()}`, holdings: [] };
-            onSaveAccounts([...accounts, newAccount]);
-        }
-        setEditingAccount(null);
-    };
-
-    const handleDeleteAccount = (accountId: string) => {
-        if (window.confirm("Are you sure you want to delete this account and all its holdings? This cannot be undone.")) {
-            onSaveAccounts(accounts.filter(acc => acc.id !== accountId));
+    const handleDeleteAsset = (assetId: string) => {
+        if (window.confirm("Are you sure you want to delete this asset? This cannot be undone.")) {
+            onSaveAssets(assets.filter(acc => acc.id !== assetId));
         }
     };
 
     const handleSaveHolding = (holdingData: Omit<Holding, 'id'>) => {
-        const accountToUpdateId = editingHolding ? accounts.find(a => a.holdings.some(h => h.id === editingHolding.id))?.id : accountForNewHolding?.id;
-        if (!accountToUpdateId) return;
+        const assetToUpdateId = editingHolding ? assets.find(a => a.holdings?.some(h => h.id === editingHolding.id))?.id : assetForNewHolding?.id;
+        if (!assetToUpdateId) return;
 
-        const updatedAccounts = accounts.map(acc => {
-            if (acc.id === accountToUpdateId) {
+        const updatedAssets = assets.map(asset => {
+            if (asset.id === assetToUpdateId) {
                 let updatedHoldings;
                 if (editingHolding) {
-                    updatedHoldings = acc.holdings.map(h => h.id === editingHolding.id ? { ...h, ...holdingData } : h);
+                    updatedHoldings = asset.holdings?.map(h => h.id === editingHolding.id ? { ...h, ...holdingData } : h);
                 } else {
                     const newHolding: Holding = { ...holdingData, id: `hold-${Date.now()}`};
-                    updatedHoldings = [...acc.holdings, newHolding];
+                    updatedHoldings = [...(asset.holdings || []), newHolding];
                 }
-                return { ...acc, holdings: updatedHoldings };
+                return { ...asset, holdings: updatedHoldings };
             }
-            return acc;
+            return asset;
         });
-        onSaveAccounts(updatedAccounts);
+        onSaveAssets(updatedAssets);
         setEditingHolding(null);
-        setAccountForNewHolding(null);
+        setAssetForNewHolding(null);
     };
 
-    const handleDeleteHolding = (accountId: string, holdingId: string) => {
-         const updatedAccounts = accounts.map(acc => {
-            if (acc.id === accountId) {
-                return { ...acc, holdings: acc.holdings.filter(h => h.id !== holdingId) };
+    const handleDeleteHolding = (assetId: string, holdingId: string) => {
+         const updatedAssets = assets.map(asset => {
+            if (asset.id === assetId) {
+                return { ...asset, holdings: asset.holdings?.filter(h => h.id !== holdingId) };
             }
-            return acc;
+            return asset;
         });
-        onSaveAccounts(updatedAccounts);
+        onSaveAssets(updatedAssets);
     }
     
-    if (!accounts) {
+    if (!assets) {
         return <div className="flex justify-center items-center h-64"><Spinner /></div>;
     }
 
     return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-slate-800 p-6 rounded-xl shadow-lg text-center">
-            <h3 className="text-slate-400 text-lg">Total Portfolio Value</h3>
-            <p className="text-4xl font-bold text-purple-400">${totalValue.toFixed(2)}</p>
-        </div>
-        <div className="bg-slate-800 p-6 rounded-xl shadow-lg text-center">
-            <h3 className="text-slate-400 text-lg">Total Cost Basis</h3>
-            <p className="text-4xl font-bold text-slate-300">${totalCost.toFixed(2)}</p>
-        </div>
-        <div className="bg-slate-800 p-6 rounded-xl shadow-lg text-center">
-            <h3 className="text-slate-400 text-lg">Total Gain / Loss</h3>
-            <p className={`text-4xl font-bold ${totalGainLoss >= 0 ? 'text-green-400' : 'text-red-500'}`}>
-                {totalGainLoss >= 0 ? '+' : ''}${totalGainLoss.toFixed(2)}
-            </p>
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-          <Button onClick={() => { setEditingAccount(null); setAccountModalOpen(true); }}>
-            Add Investment Account
-          </Button>
+      <div className="bg-slate-800 p-6 rounded-xl shadow-lg text-center">
+        <h3 className="text-slate-400 text-lg">Total Asset Value</h3>
+        <p className="text-4xl font-bold text-purple-400">${totalValue.toFixed(2)}</p>
       </div>
         
-        {accounts.length > 0 ? (
+        {assets.length > 0 ? (
             <div className="space-y-6">
-                {accounts.map(acc => (
-                    <InvestmentAccountCard
-                        key={acc.id}
-                        account={acc}
-                        onEditAccount={() => { setEditingAccount(acc); setAccountModalOpen(true); }}
-                        onDeleteAccount={() => handleDeleteAccount(acc.id)}
-                        onAddHolding={() => { setAccountForNewHolding(acc); setHoldingModalOpen(true); }}
-                        onEditHolding={(holding) => { setEditingHolding(holding); setHoldingModalOpen(true); }}
-                        onDeleteHolding={(holdingId) => handleDeleteHolding(acc.id, holdingId)}
-                    />
-                ))}
+                {assets.map(asset => {
+                    if (asset.holdings !== undefined) {
+                        return (
+                            <AssetAccountCard
+                                key={asset.id}
+                                asset={asset}
+                                onEditAsset={() => onEditAsset(asset)}
+                                onDeleteAsset={() => handleDeleteAsset(asset.id)}
+                                onAddHolding={() => { setAssetForNewHolding(asset); setHoldingModalOpen(true); }}
+                                onEditHolding={(holding) => { setEditingHolding(holding); setHoldingModalOpen(true); }}
+                                onDeleteHolding={(holdingId) => handleDeleteHolding(asset.id, holdingId)}
+                            />
+                        )
+                    } else {
+                        return (
+                           <AssetValueCard
+                                key={asset.id}
+                                asset={asset}
+                                onEdit={() => onEditAsset(asset)}
+                                onDelete={() => handleDeleteAsset(asset.id)}
+                           />
+                        )
+                    }
+                })}
             </div>
         ) : (
             <div className="text-center py-20 bg-slate-800 rounded-xl">
-              <h2 className="text-2xl font-semibold text-white">No investment accounts found.</h2>
-              <p className="text-slate-400 mt-2 mb-6">Add an account to start tracking your investments.</p>
-              <Button onClick={() => { setEditingAccount(null); setAccountModalOpen(true); }}>Get Started</Button>
+              <h2 className="text-2xl font-semibold text-white">No assets found.</h2>
+              <p className="text-slate-400 mt-2 mb-6">Add an asset to start tracking your net worth.</p>
+              <Button onClick={() => onEditAsset(null)}>Get Started</Button>
             </div>
         )}
 
-      <AddInvestmentAccountModal
-        isOpen={accountModalOpen}
-        onClose={() => setAccountModalOpen(false)}
-        onSave={handleSaveAccount}
-        initialData={editingAccount}
-      />
-
        <AddHoldingModal
         isOpen={holdingModalOpen}
-        onClose={() => { setHoldingModalOpen(false); setEditingHolding(null); setAccountForNewHolding(null); }}
+        onClose={() => { setHoldingModalOpen(false); setEditingHolding(null); setAssetForNewHolding(null); }}
         onSave={handleSaveHolding}
         initialData={editingHolding}
       />

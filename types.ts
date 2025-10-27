@@ -7,11 +7,20 @@ export interface Holding {
   currentPrice: number;
 }
 
-export interface InvestmentAccount {
+export type AssetType = 'Brokerage' | 'Retirement' | 'HSA' | 'Cash & Savings' | 'Real Estate' | 'Vehicle' | 'Other';
+
+export interface Asset {
   id: string;
   name: string;
-  type: 'Brokerage' | 'Roth IRA' | 'Traditional IRA' | '401k' | 'HSA' | 'Other';
-  holdings: Holding[];
+  type: AssetType;
+  value?: number; // For single-value assets
+  holdings?: Holding[]; // For accounts with multiple holdings
+}
+
+export interface Liability {
+  id: string;
+  name: string;
+  amount: number;
 }
 
 export interface Expense {

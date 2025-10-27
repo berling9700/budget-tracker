@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Budget, Expense, Category, InvestmentAccount, Holding } from '../types';
+import { Budget, Expense, Category, Asset, Holding, Liability } from '../types';
 import { BudgetSetupModal } from './components/modals/BudgetSetupModal';
 import { AddExpenseModal } from './components/modals/AddExpenseModal';
+import { AddAssetModal } from './components/modals/AddInvestmentAccountModal';
 import { Button } from './components/ui/Button';
 import { Dropdown, DropdownItem } from './components/ui/Dropdown';
 import { Spinner } from './components/ui/Spinner';
 import { Nav } from './components/ui/Nav';
 import { BudgetView } from './components/BudgetView';
-import { InvestmentsDashboard } from './components/InvestmentsDashboard';
+import { AssetsDashboard } from './components/InvestmentsDashboard';
+import { NetWorthDashboard } from './components/NetWorthDashboard';
+import { Chatbot } from './components/ui/Chatbot';
 
-type ModalType = 'setup' | 'addExpense' | null;
+type ModalType = 'setup' | 'addExpense' | 'addAsset' | null;
 type ExpenseData = Omit<Expense, 'id' | 'categoryId'> & { categoryId?: string; categoryName?: string };
-type Page = 'budgets' | 'investments';
+type Page = 'dashboard' | 'budgets' | 'assets';
 
 const App: React.FC = () => {
-  const [page, setPage] = useState<Page>('budgets');
+  const [page, setPage] = useState<Page>('dashboard');
   
   // Budget State
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -23,8 +26,13 @@ const App: React.FC = () => {
   const [budgetToEdit, setBudgetToEdit] = useState<Budget | null>(null);
   const [viewMonth, setViewMonth] = useState<number>(0); // 0 for annual, 1-12 for month
 
-  // Investment State
-  const [investmentAccounts, setInvestmentAccounts] = useState<InvestmentAccount[]>([]);
+  // Asset State
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
+
+  // Liabilities State
+  const [liabilities, setLiabilities] = useState<Liability[]>([]);
+
 
   // General State
   const [isLoading, setIsLoading] = useState(true);
@@ -37,7 +45,8 @@ const App: React.FC = () => {
       if (appDataString) {
           const appData = JSON.parse(appDataString);
           setBudgets(appData.budgets || []);
-          setInvestmentAccounts(appData.investmentAccounts || []);
+          setAssets(appData.assets || appData.investmentAccounts || []); // Migration from investmentAccounts
+          setLiabilities(appData.liabilities || []);
           const savedActiveId = appData.activeBudgetId;
           if (savedActiveId && (appData.budgets || []).find((b: Budget) => b.id === savedActiveId)) {
             setActiveBudgetId(savedActiveId);
@@ -47,7 +56,7 @@ const App: React.FC = () => {
           return;
       }
 
-      // Legacy data migration
+      // Legacy data migration for budgets
       const savedBudgets = localStorage.getItem('budget-tracker-data');
       const savedActiveId = localStorage.getItem('budget-tracker-active-id');
       if (savedBudgets) {
@@ -59,7 +68,7 @@ const App: React.FC = () => {
             setActiveBudgetId(parsedBudgets[0].id);
         }
         // Save migrated data to new structure
-        saveAllData({ budgets: parsedBudgets, activeBudgetId: savedActiveId, investmentAccounts: [] });
+        saveAllData({ budgets: parsedBudgets, activeBudgetId: savedActiveId, assets: [], liabilities: [] });
         localStorage.removeItem('budget-tracker-data');
         localStorage.removeItem('budget-tracker-active-id');
       }
@@ -72,12 +81,22 @@ const App: React.FC = () => {
   
   const activeBudget = useMemo(() => budgets.find(b => b.id === activeBudgetId), [budgets, activeBudgetId]);
 
-  const saveAllData = useCallback((data: { budgets: Budget[], activeBudgetId: string | null, investmentAccounts: InvestmentAccount[] }) => {
+  const headerTitle = useMemo(() => {
+    switch (page) {
+      case 'dashboard': return 'Your Financial Overview';
+      case 'assets': return 'Your Assets';
+      case 'budgets': return activeBudget ? activeBudget.name : 'Create a budget to get started';
+      default: return '';
+    }
+  }, [page, activeBudget]);
+
+  const saveAllData = useCallback((data: { budgets: Budget[], activeBudgetId: string | null, assets: Asset[], liabilities: Liability[] }) => {
     try {
         const dataToSave = {
             budgets: data.budgets,
             activeBudgetId: data.activeBudgetId,
-            investmentAccounts: data.investmentAccounts,
+            assets: data.assets,
+            liabilities: data.liabilities,
         };
         localStorage.setItem('budget-tracker-app-data', JSON.stringify(dataToSave));
     } catch (error) {
@@ -89,13 +108,18 @@ const App: React.FC = () => {
     setBudgets(newBudgets);
     const finalActiveId = newActiveId !== undefined ? newActiveId : activeBudgetId;
     setActiveBudgetId(finalActiveId);
-    saveAllData({ budgets: newBudgets, activeBudgetId: finalActiveId, investmentAccounts });
-  }, [activeBudgetId, investmentAccounts, saveAllData]);
+    saveAllData({ budgets: newBudgets, activeBudgetId: finalActiveId, assets, liabilities });
+  }, [activeBudgetId, assets, liabilities, saveAllData]);
 
-  const saveInvestmentAccounts = useCallback((newAccounts: InvestmentAccount[]) => {
-      setInvestmentAccounts(newAccounts);
-      saveAllData({ budgets, activeBudgetId, investmentAccounts: newAccounts });
-  }, [budgets, activeBudgetId, saveAllData]);
+  const saveAssets = useCallback((newAssets: Asset[]) => {
+      setAssets(newAssets);
+      saveAllData({ budgets, activeBudgetId, assets: newAssets, liabilities });
+  }, [budgets, activeBudgetId, liabilities, saveAllData]);
+
+  const saveLiabilities = useCallback((newLiabilities: Liability[]) => {
+      setLiabilities(newLiabilities);
+      saveAllData({ budgets, activeBudgetId, assets, liabilities: newLiabilities });
+  }, [budgets, activeBudgetId, assets, saveAllData]);
 
 
   // BUDGET HANDLERS
@@ -247,10 +271,29 @@ const App: React.FC = () => {
     setActiveModal('setup');
   }
 
+  // ASSET HANDLERS
+  const handleSaveAsset = (assetData: Omit<Asset, 'id'>) => {
+    if (assetToEdit) {
+        const updatedAssets = assets.map(asset => asset.id === assetToEdit.id ? { ...assetToEdit, ...assetData } : asset);
+        saveAssets(updatedAssets);
+    } else {
+        const newAsset: Asset = { ...assetData, id: `asset-${Date.now()}` };
+        saveAssets([...assets, newAsset]);
+    }
+    setActiveModal(null);
+    setAssetToEdit(null);
+  };
+
+  const handleEditAsset = (asset: Asset) => {
+    setAssetToEdit(asset);
+    setActiveModal('addAsset');
+  };
+
+
   // DATA IMPORT/EXPORT
   const handleExportData = () => {
-    const data = { budgets, activeBudgetId, investmentAccounts };
-    if (budgets.length === 0 && investmentAccounts.length === 0) {
+    const data = { budgets, activeBudgetId, assets, liabilities };
+    if (budgets.length === 0 && assets.length === 0 && liabilities.length === 0) {
         alert("No data to export.");
         return;
     }
@@ -273,17 +316,21 @@ const App: React.FC = () => {
             const text = e.target?.result as string;
             const importedData = JSON.parse(text);
             const importedBudgets = importedData.budgets || [];
-            const importedAccounts = importedData.investmentAccounts || [];
+            // Handle migration from old 'investmentAccounts' key
+            const importedAssets = importedData.assets || importedData.investmentAccounts || [];
+            const importedLiabilities = importedData.liabilities || [];
 
-            if (!Array.isArray(importedBudgets) || !Array.isArray(importedAccounts)) {
+
+            if (!Array.isArray(importedBudgets) || !Array.isArray(importedAssets) || !Array.isArray(importedLiabilities)) {
                  throw new Error("Invalid file format.");
             }
             if (window.confirm("This will overwrite all your current data. Are you sure you want to continue?")) {
                 const newActiveId = importedData.activeBudgetId || (importedBudgets.length > 0 ? importedBudgets[0].id : null);
                 setBudgets(importedBudgets);
-                setInvestmentAccounts(importedAccounts);
+                setAssets(importedAssets);
+                setLiabilities(importedLiabilities);
                 setActiveBudgetId(newActiveId);
-                saveAllData({ budgets: importedBudgets, activeBudgetId: newActiveId, investmentAccounts: importedAccounts });
+                saveAllData({ budgets: importedBudgets, activeBudgetId: newActiveId, assets: importedAssets, liabilities: importedLiabilities });
                 alert("Data imported successfully!");
             }
         } catch (error: any) {
@@ -306,10 +353,6 @@ const App: React.FC = () => {
     );
   }
 
-  const headerTitle = page === 'budgets'
-    ? (activeBudget ? activeBudget.name : "Create a budget to get started")
-    : "Your Investment Portfolio";
-
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
@@ -325,7 +368,7 @@ const App: React.FC = () => {
                         onChange={e => {
                             const newActiveId = e.target.value;
                             setActiveBudgetId(newActiveId);
-                            saveAllData({ budgets, activeBudgetId: newActiveId, investmentAccounts });
+                            saveAllData({ budgets, activeBudgetId: newActiveId, assets, liabilities });
                         }}
                         className="bg-slate-700 border-slate-600 text-white rounded-md p-2 h-10"
                     >
@@ -344,6 +387,15 @@ const App: React.FC = () => {
                     </Button>
                 )}
 
+                {page === 'assets' &&
+                    <Button onClick={() => {
+                        setAssetToEdit(null);
+                        setActiveModal('addAsset');
+                    }}>
+                        Add Asset
+                    </Button>
+                }
+
                 <input type="file" ref={importInputRef} style={{ display: 'none' }} onChange={handleImportFile} accept=".json" />
                 <Dropdown trigger={
                     <Button variant="ghost" size="icon-md">
@@ -361,7 +413,8 @@ const App: React.FC = () => {
                           className={`
                               ${(!activeBudget || activeBudget.expenses.length === 0) 
                                   ? 'text-slate-600 cursor-not-allowed' 
-                                  : 'hover:bg-red-800/50 text-red-400 hover:text-red-300'
+                                  //: 'hover:bg-red-800/50 text-red-400 hover:text-red-300'
+                                  : 'text-red-400 hover:text-red-300 hover:bg-red-500/20'
                               }`
                           }
                       >
@@ -376,6 +429,15 @@ const App: React.FC = () => {
         <Nav currentPage={page} onPageChange={setPage} />
 
         <main>
+          {page === 'dashboard' && (
+            <NetWorthDashboard
+                assets={assets}
+                liabilities={liabilities}
+                onSaveLiabilities={saveLiabilities}
+                activeBudget={activeBudget}
+            />
+          )}
+
           {page === 'budgets' && (
             <BudgetView
               activeBudget={activeBudget}
@@ -393,10 +455,11 @@ const App: React.FC = () => {
             />
           )}
 
-          {page === 'investments' && (
-            <InvestmentsDashboard
-              accounts={investmentAccounts}
-              onSaveAccounts={saveInvestmentAccounts}
+          {page === 'assets' && (
+            <AssetsDashboard
+              assets={assets}
+              onSaveAssets={saveAssets}
+              onEditAsset={handleEditAsset}
             />
           )}
         </main>
@@ -422,6 +485,23 @@ const App: React.FC = () => {
             categories={activeBudget.categories}
         />
       )}
+
+      <AddAssetModal
+        isOpen={activeModal === 'addAsset'}
+        onClose={() => {
+            setActiveModal(null);
+            setAssetToEdit(null);
+        }}
+        onSave={handleSaveAsset}
+        initialData={assetToEdit}
+      />
+
+      <Chatbot
+        page={page}
+        budgets={budgets}
+        assets={assets}
+        liabilities={liabilities}
+       />
     </div>
   );
 };
