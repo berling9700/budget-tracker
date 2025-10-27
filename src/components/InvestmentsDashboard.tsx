@@ -4,6 +4,7 @@ import { Asset, Holding } from '../../types';
 import { Button } from './ui/Button';
 import { AddHoldingModal } from './modals/AddHoldingModal';
 import { Spinner } from './ui/Spinner';
+import { fetchMultipleQuotes } from '../services/marketDataService';
 
 const HoldingRow: React.FC<{
     holding: Holding,
@@ -141,13 +142,16 @@ const AssetValueCard: React.FC<{
 interface AssetsDashboardProps {
   assets: Asset[];
   onSaveAssets: (assets: Asset[]) => void;
-  onEditAsset: (asset: Asset) => void;
+  onEditAsset: (asset: Asset | null) => void;
 }
 
 export const AssetsDashboard: React.FC<AssetsDashboardProps> = ({ assets, onSaveAssets, onEditAsset }) => {
     const [holdingModalOpen, setHoldingModalOpen] = useState(false);
     const [editingHolding, setEditingHolding] = useState<Holding | null>(null);
     const [assetForNewHolding, setAssetForNewHolding] = useState<Asset | null>(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [refreshProgress, setRefreshProgress] = useState(0);
+    const [refreshStatus, setRefreshStatus] = useState('');
 
     const totalValue = useMemo(() => {
         return assets.reduce((total, asset) => {
@@ -196,15 +200,86 @@ export const AssetsDashboard: React.FC<AssetsDashboardProps> = ({ assets, onSave
         onSaveAssets(updatedAssets);
     }
     
+    const handleRefreshAllPrices = async () => {
+        const allTickers = assets.flatMap(a => a.holdings?.map(h => h.ticker) || []);
+        const uniqueTickers = [...new Set(allTickers)].filter(Boolean) as string[];
+
+        if (uniqueTickers.length === 0) {
+            alert("No holdings with ticker symbols found to refresh.");
+            return;
+        }
+        
+        setIsRefreshing(true);
+        setRefreshProgress(0);
+        setRefreshStatus(`Found ${uniqueTickers.length} unique ticker(s). Starting refresh...`);
+
+        try {
+            const quotes = await fetchMultipleQuotes(uniqueTickers, (progress) => {
+                setRefreshProgress(progress);
+                setRefreshStatus(''); // Clear status message once progress starts
+            });
+
+            if (quotes.size > 0) {
+                const updatedAssets = assets.map(asset => {
+                    if (!asset.holdings) return asset;
+                    const updatedHoldings = asset.holdings.map(holding => {
+                        const quote = quotes.get(holding.ticker.toUpperCase());
+                        if (quote) {
+                            return { ...holding, currentPrice: quote.price };
+                        }
+                        return holding;
+                    });
+                    return { ...asset, holdings: updatedHoldings };
+                });
+                onSaveAssets(updatedAssets);
+                setRefreshStatus(`Successfully updated prices for ${quotes.size} ticker(s)!`);
+            } else {
+                setRefreshStatus("Could not fetch new price data. Check API key, connection, and daily limit.");
+            }
+
+        } catch (error: any) {
+            setRefreshStatus(`Error: ${error.message}`);
+        } finally {
+            setTimeout(() => {
+                setIsRefreshing(false);
+                setRefreshStatus('');
+            }, 4000); // Keep status message for a few seconds
+        }
+    };
+
     if (!assets) {
         return <div className="flex justify-center items-center h-64"><Spinner /></div>;
     }
 
     return (
     <div className="space-y-8">
-      <div className="bg-slate-800 p-6 rounded-xl shadow-lg text-center">
-        <h3 className="text-slate-400 text-lg">Total Asset Value</h3>
-        <p className="text-4xl font-bold text-purple-400">${totalValue.toFixed(2)}</p>
+      <div className="bg-slate-800 p-6 rounded-xl shadow-lg relative">
+        <div className="text-center">
+            <h3 className="text-slate-400 text-lg">Total Asset Value</h3>
+            <p className="text-4xl font-bold text-purple-400">${totalValue.toFixed(2)}</p>
+        </div>
+        <Button 
+            variant="secondary" 
+            onClick={handleRefreshAllPrices} 
+            disabled={isRefreshing}
+            className="absolute top-4 right-4"
+            aria-label="Refresh All Prices"
+            size="icon-md"
+        >
+            {isRefreshing ? <Spinner size="sm" /> : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+                </svg>
+            )}
+        </Button>
+        {isRefreshing && (
+            <div className="absolute bottom-4 left-4 right-4">
+                <p className="text-xs text-center text-slate-400 mb-1">{refreshStatus || `Refreshing prices... (${Math.round(refreshProgress)}%)`}</p>
+                <div className="w-full bg-slate-600 rounded-full h-1.5">
+                    <div className="bg-purple-500 h-1.5 rounded-full transition-all duration-300" style={{ width: `${refreshProgress}%` }}></div>
+                </div>
+            </div>
+        )}
       </div>
         
         {assets.length > 0 ? (

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Holding } from '../../../types';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
+import { fetchQuote } from '../../services/marketDataService';
+import { Spinner } from '../ui/Spinner';
 
 interface AddHoldingModalProps {
   isOpen: boolean;
@@ -16,6 +18,8 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
   const [shares, setShares] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
+  const [isFetching, setIsFetching] = useState(false);
+  const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -24,6 +28,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
       setShares(initialData?.shares.toString() || '');
       setPurchasePrice(initialData?.purchasePrice.toString() || '');
       setCurrentPrice(initialData?.currentPrice.toString() || '');
+      setFetchError('');
     } else {
       // Clear form on close
       setTicker('');
@@ -33,6 +38,23 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
       setCurrentPrice('');
     }
   }, [isOpen, initialData]);
+  
+  const handleFetchInfo = async () => {
+    if (!ticker.trim()) return;
+    setIsFetching(true);
+    setFetchError('');
+    try {
+        const quote = await fetchQuote(ticker.trim());
+        if (quote) {
+            setName(quote.name);
+            setCurrentPrice(quote.price.toString());
+        }
+    } catch (error: any) {
+        setFetchError(error.message || "Failed to fetch data.");
+    } finally {
+        setIsFetching(false);
+    }
+  };
 
   const handleSave = () => {
     const sharesNum = parseFloat(shares);
@@ -54,13 +76,19 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
         <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Ticker Symbol</label>
-              <input type="text" value={ticker} onChange={e => setTicker(e.target.value)} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="e.g., VOO" />
+              <div className="flex items-center gap-2">
+                <input type="text" value={ticker} onChange={e => setTicker(e.target.value)} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="e.g., VOO" />
+                <Button variant="secondary" onClick={handleFetchInfo} disabled={isFetching} className="px-3">
+                    {isFetching ? <Spinner size="sm" /> : 'Fetch'}
+                </Button>
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Name</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2" placeholder="e.g., Vanguard S&P 500 ETF" />
             </div>
         </div>
+        {fetchError && <p className="text-red-500 text-sm col-span-2 -mt-2">{fetchError}</p>}
         <div className="grid grid-cols-3 gap-4">
              <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Shares</label>
