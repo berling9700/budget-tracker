@@ -1,45 +1,53 @@
-
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Budget, Expense, Category } from '../types';
-import { Dashboard } from './components/Dashboard';
+import { Budget, Expense, Category, InvestmentAccount, Holding } from '../types';
 import { BudgetSetupModal } from './components/modals/BudgetSetupModal';
 import { AddExpenseModal } from './components/modals/AddExpenseModal';
 import { Button } from './components/ui/Button';
 import { Dropdown, DropdownItem } from './components/ui/Dropdown';
 import { Spinner } from './components/ui/Spinner';
+import { Nav } from './components/ui/Nav';
+import { BudgetView } from './components/BudgetView';
+import { InvestmentsDashboard } from './components/InvestmentsDashboard';
 
 type ModalType = 'setup' | 'addExpense' | null;
 type ExpenseData = Omit<Expense, 'id' | 'categoryId'> & { categoryId?: string; categoryName?: string };
-
-
-const MonthSelector: React.FC<{selectedMonth: number, onSelectMonth: (month: number) => void}> = ({selectedMonth, onSelectMonth}) => {
-    const months = ["Annual", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return (
-        <div className="flex flex-wrap gap-1 md:gap-2 items-center bg-slate-800/50 p-2 rounded-lg mb-8">
-            {months.map((month, index) => (
-                <button
-                    key={index}
-                    onClick={() => onSelectMonth(index)}
-                    className={`flex-1 text-center px-2 py-1 text-sm font-semibold rounded-md transition-colors ${selectedMonth === index ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
-                >
-                    {month}
-                </button>
-            ))}
-        </div>
-    )
-}
+type Page = 'budgets' | 'investments';
 
 const App: React.FC = () => {
+  const [page, setPage] = useState<Page>('budgets');
+  
+  // Budget State
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [activeBudgetId, setActiveBudgetId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [budgetToEdit, setBudgetToEdit] = useState<Budget | null>(null);
   const [viewMonth, setViewMonth] = useState<number>(0); // 0 for annual, 1-12 for month
+
+  // Investment State
+  const [investmentAccounts, setInvestmentAccounts] = useState<InvestmentAccount[]>([]);
+
+  // General State
   const [isLoading, setIsLoading] = useState(true);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
+      // New data structure
+      const appDataString = localStorage.getItem('budget-tracker-app-data');
+      if (appDataString) {
+          const appData = JSON.parse(appDataString);
+          setBudgets(appData.budgets || []);
+          setInvestmentAccounts(appData.investmentAccounts || []);
+          const savedActiveId = appData.activeBudgetId;
+          if (savedActiveId && (appData.budgets || []).find((b: Budget) => b.id === savedActiveId)) {
+            setActiveBudgetId(savedActiveId);
+          } else if ((appData.budgets || []).length > 0) {
+            setActiveBudgetId(appData.budgets[0].id);
+          }
+          return;
+      }
+
+      // Legacy data migration
       const savedBudgets = localStorage.getItem('budget-tracker-data');
       const savedActiveId = localStorage.getItem('budget-tracker-active-id');
       if (savedBudgets) {
@@ -50,9 +58,13 @@ const App: React.FC = () => {
         } else if (parsedBudgets.length > 0) {
             setActiveBudgetId(parsedBudgets[0].id);
         }
+        // Save migrated data to new structure
+        saveAllData({ budgets: parsedBudgets, activeBudgetId: savedActiveId, investmentAccounts: [] });
+        localStorage.removeItem('budget-tracker-data');
+        localStorage.removeItem('budget-tracker-active-id');
       }
     } catch (error) {
-        console.error("Failed to load budgets from localStorage", error);
+        console.error("Failed to load data from localStorage", error);
     } finally {
         setIsLoading(false);
     }
@@ -60,22 +72,33 @@ const App: React.FC = () => {
   
   const activeBudget = useMemo(() => budgets.find(b => b.id === activeBudgetId), [budgets, activeBudgetId]);
 
+  const saveAllData = useCallback((data: { budgets: Budget[], activeBudgetId: string | null, investmentAccounts: InvestmentAccount[] }) => {
+    try {
+        const dataToSave = {
+            budgets: data.budgets,
+            activeBudgetId: data.activeBudgetId,
+            investmentAccounts: data.investmentAccounts,
+        };
+        localStorage.setItem('budget-tracker-app-data', JSON.stringify(dataToSave));
+    } catch (error) {
+        console.error("Failed to save data to localStorage", error);
+    }
+  }, []);
+
   const saveBudgets = useCallback((newBudgets: Budget[], newActiveId?: string | null) => {
     setBudgets(newBudgets);
     const finalActiveId = newActiveId !== undefined ? newActiveId : activeBudgetId;
     setActiveBudgetId(finalActiveId);
-    try {
-      localStorage.setItem('budget-tracker-data', JSON.stringify(newBudgets));
-      if (finalActiveId) {
-          localStorage.setItem('budget-tracker-active-id', finalActiveId);
-      } else {
-          localStorage.removeItem('budget-tracker-active-id');
-      }
-    } catch (error) {
-        console.error("Failed to save budgets to localStorage", error);
-    }
-  }, [activeBudgetId]);
+    saveAllData({ budgets: newBudgets, activeBudgetId: finalActiveId, investmentAccounts });
+  }, [activeBudgetId, investmentAccounts, saveAllData]);
 
+  const saveInvestmentAccounts = useCallback((newAccounts: InvestmentAccount[]) => {
+      setInvestmentAccounts(newAccounts);
+      saveAllData({ budgets, activeBudgetId, investmentAccounts: newAccounts });
+  }, [budgets, activeBudgetId, saveAllData]);
+
+
+  // BUDGET HANDLERS
   const handleSaveBudget = (budgetData: Omit<Budget, 'id' | 'expenses'>) => {
     if (budgetToEdit) { // Editing existing budget
         const updatedBudgets = budgets.map(b => b.id === budgetToEdit.id ? {...budgetToEdit, ...budgetData} : b);
@@ -130,11 +153,10 @@ const App: React.FC = () => {
           if (!categoryId && expData.categoryName) {
               let category = budgetCategories.find(c => c.name.toLowerCase() === expData.categoryName!.toLowerCase());
               if (!category) {
-                  // Create new category
                   category = {
                       id: `cat-${Date.now()}-${i}`,
                       name: expData.categoryName,
-                      budgeted: 0 // New categories from expenses start with 0 budget
+                      budgeted: 0
                   };
                   budgetCategories.push(category);
                   categoriesWereUpdated = true;
@@ -148,7 +170,7 @@ const App: React.FC = () => {
               date: expData.date,
               categoryId: categoryId!,
           } as Expense;
-      }).filter(exp => exp.categoryId); // Filter out any that still couldn't get a categoryId
+      }).filter(exp => exp.categoryId);
       
       const updatedBudget = {
           ...activeBudget,
@@ -204,24 +226,16 @@ const App: React.FC = () => {
 
   const handleDeleteExpensesInView = () => {
     if (!activeBudget) return;
-
     const months = ["Annual", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const viewName = viewMonth === 0 ? `the year ${activeBudget.year}` : `${months[viewMonth]} ${activeBudget.year}`;
-    
-    const expensesInView = viewMonth === 0 
-        ? activeBudget.expenses 
-        : activeBudget.expenses.filter(exp => new Date(exp.date).getUTCMonth() + 1 === viewMonth);
+    const expensesInView = viewMonth === 0 ? activeBudget.expenses : activeBudget.expenses.filter(exp => new Date(exp.date).getUTCMonth() + 1 === viewMonth);
 
     if (expensesInView.length === 0) {
         alert(`There are no expenses to delete for ${viewName}.`);
         return;
     }
-
     if (window.confirm(`Are you sure you want to delete all ${expensesInView.length} expense(s) for ${viewName}? This action cannot be undone.`)) {
-        const expensesToKeep = viewMonth === 0
-            ? [] // Delete all for annual view
-            : activeBudget.expenses.filter(exp => new Date(exp.date).getUTCMonth() + 1 !== viewMonth);
-        
+        const expensesToKeep = viewMonth === 0 ? [] : activeBudget.expenses.filter(exp => new Date(exp.date).getUTCMonth() + 1 !== viewMonth);
         const updatedBudget = { ...activeBudget, expenses: expensesToKeep };
         const updatedBudgets = budgets.map(b => b.id === activeBudgetId ? updatedBudget : b);
         saveBudgets(updatedBudgets);
@@ -229,16 +243,18 @@ const App: React.FC = () => {
   };
   
   const handleEditBudget = () => {
-    setBudgetToEdit(activeBudget);
+    setBudgetToEdit(activeBudget || null);
     setActiveModal('setup');
   }
 
+  // DATA IMPORT/EXPORT
   const handleExportData = () => {
-    if (budgets.length === 0) {
+    const data = { budgets, activeBudgetId, investmentAccounts };
+    if (budgets.length === 0 && investmentAccounts.length === 0) {
         alert("No data to export.");
         return;
     }
-    const dataStr = JSON.stringify(budgets, null, 2);
+    const dataStr = JSON.stringify(data, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const exportFileDefaultName = 'budget-tracker-data.json';
     const linkElement = document.createElement('a');
@@ -255,24 +271,26 @@ const App: React.FC = () => {
     reader.onload = (e) => {
         try {
             const text = e.target?.result as string;
-            const importedBudgets = JSON.parse(text);
+            const importedData = JSON.parse(text);
+            const importedBudgets = importedData.budgets || [];
+            const importedAccounts = importedData.investmentAccounts || [];
 
-            if (!Array.isArray(importedBudgets) || importedBudgets.some(b => !b.id || !b.name || !b.year || !b.categories || !b.expenses)) {
-                throw new Error("Invalid file format. The file must contain an array of budgets.");
+            if (!Array.isArray(importedBudgets) || !Array.isArray(importedAccounts)) {
+                 throw new Error("Invalid file format.");
             }
-
-            if (window.confirm("This will overwrite all your current budget data. Are you sure you want to continue?")) {
-                const newActiveId = importedBudgets.length > 0 ? importedBudgets[0].id : null;
-                saveBudgets(importedBudgets, newActiveId);
+            if (window.confirm("This will overwrite all your current data. Are you sure you want to continue?")) {
+                const newActiveId = importedData.activeBudgetId || (importedBudgets.length > 0 ? importedBudgets[0].id : null);
+                setBudgets(importedBudgets);
+                setInvestmentAccounts(importedAccounts);
+                setActiveBudgetId(newActiveId);
+                saveAllData({ budgets: importedBudgets, activeBudgetId: newActiveId, investmentAccounts: importedAccounts });
                 alert("Data imported successfully!");
             }
         } catch (error: any) {
             alert(`Failed to import data: ${error.message}`);
             console.error("Import error:", error);
         } finally {
-            if (event.target) {
-                event.target.value = '';
-            }
+            if (event.target) event.target.value = '';
         }
     };
     reader.readAsText(file);
@@ -283,27 +301,31 @@ const App: React.FC = () => {
     return (
         <div className="flex flex-col justify-center items-center h-screen bg-slate-900 space-y-4">
             <Spinner size="lg" />
-            <div className="text-2xl text-slate-400">Loading Budgets...</div>
+            <div className="text-2xl text-slate-400">Loading Your Financials...</div>
         </div>
     );
   }
+
+  const headerTitle = page === 'budgets'
+    ? (activeBudget ? activeBudget.name : "Create a budget to get started")
+    : "Your Investment Portfolio";
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <div>
-                <h1 className="text-4xl font-bold text-white tracking-tight">Budget Tracker</h1>
-                <p className="text-purple-300 mt-1 text-lg">{activeBudget ? activeBudget.name : "Create a budget to get started"}</p>
+                <h1 className="text-4xl font-bold text-white tracking-tight">Financial Tracker</h1>
+                <p className="text-purple-300 mt-1 text-lg">{headerTitle}</p>
             </div>
             <div className="flex items-center space-x-2 flex-wrap">
-                {budgets.length > 1 && (
+                {page === 'budgets' && budgets.length > 1 && (
                     <select
                         value={activeBudgetId || ''}
                         onChange={e => {
                             const newActiveId = e.target.value;
-                            setActiveBudgetId(newActiveId)
-                            localStorage.setItem('budget-tracker-active-id', newActiveId);
+                            setActiveBudgetId(newActiveId);
+                            saveAllData({ budgets, activeBudgetId: newActiveId, investmentAccounts });
                         }}
                         className="bg-slate-700 border-slate-600 text-white rounded-md p-2 h-10"
                     >
@@ -311,14 +333,14 @@ const App: React.FC = () => {
                     </select>
                 )}
                 
-                {activeBudget && <Button onClick={() => setActiveModal('addExpense')}>Add Expense</Button> }
+                {page === 'budgets' && activeBudget && <Button onClick={() => setActiveModal('addExpense')}>Add Expense</Button> }
                  
-                {budgets.length > 0 && (
+                {page === 'budgets' && (
                     <Button variant='secondary' onClick={() => {
                         setBudgetToEdit(null);
                         setActiveModal('setup');
                     }}>
-                        New Budget
+                        {budgets.length > 0 ? 'New Budget' : 'Create Budget'}
                     </Button>
                 )}
 
@@ -332,46 +354,50 @@ const App: React.FC = () => {
                 }>
                     <DropdownItem onClick={() => importInputRef.current?.click()}>Import Data</DropdownItem>
                     <DropdownItem onClick={handleExportData}>Export Data</DropdownItem>
-                    <DropdownItem 
-                        onClick={handleDeleteExpensesInView}
-                        disabled={!activeBudget || activeBudget.expenses.length === 0}
-                        className={`
-                            ${(!activeBudget || activeBudget.expenses.length === 0) 
-                                ? 'text-slate-600 cursor-not-allowed' 
-                                : 'hover:bg-red-800/50 text-red-400 hover:text-red-300'
-                            }`
-                        }
-                    >
-                        Delete Expenses in View
-                    </DropdownItem>
+                    {page === 'budgets' && (
+                      <DropdownItem 
+                          onClick={handleDeleteExpensesInView}
+                          disabled={!activeBudget || activeBudget.expenses.length === 0}
+                          className={`
+                              ${(!activeBudget || activeBudget.expenses.length === 0) 
+                                  ? 'text-slate-600 cursor-not-allowed' 
+                                  : 'hover:bg-red-800/50 text-red-400 hover:text-red-300'
+                              }`
+                          }
+                      >
+                          Delete Expenses in View
+                      </DropdownItem>
+                    )}
                 </Dropdown>
 
             </div>
         </header>
+        
+        <Nav currentPage={page} onPageChange={setPage} />
 
         <main>
-          {activeBudget ? (
-            <>
-              <MonthSelector selectedMonth={viewMonth} onSelectMonth={setViewMonth} />
-              <Dashboard 
-                budget={activeBudget} 
-                viewMonth={viewMonth} 
-                onUpdateExpense={handleUpdateExpense} 
-                onDeleteExpense={handleDeleteExpense}
-                onDeleteMultipleExpenses={handleDeleteMultipleExpenses}
-                onUpdateMultipleExpensesCategory={handleUpdateMultipleExpensesCategory}
-                onEditBudget={handleEditBudget} 
-              />
-            </>
-          ) : (
-            <div className="text-center py-20 bg-slate-800 rounded-xl">
-              <h2 className="text-2xl font-semibold text-white">No budget found.</h2>
-              <p className="text-slate-400 mt-2 mb-6">Create your first budget to start tracking your finances.</p>
-              <Button onClick={() => {
-                setBudgetToEdit(null);
-                setActiveModal('setup');
-              }}>Get Started</Button>
-            </div>
+          {page === 'budgets' && (
+            <BudgetView
+              activeBudget={activeBudget}
+              viewMonth={viewMonth}
+              setViewMonth={setViewMonth}
+              onUpdateExpense={handleUpdateExpense}
+              onDeleteExpense={handleDeleteExpense}
+              onDeleteMultipleExpenses={handleDeleteMultipleExpenses}
+              onUpdateMultipleExpensesCategory={handleUpdateMultipleExpensesCategory}
+              onEditBudget={handleEditBudget}
+              onGetStarted={() => {
+                  setBudgetToEdit(null);
+                  setActiveModal('setup');
+              }}
+            />
+          )}
+
+          {page === 'investments' && (
+            <InvestmentsDashboard
+              accounts={investmentAccounts}
+              onSaveAccounts={saveInvestmentAccounts}
+            />
           )}
         </main>
       </div>
