@@ -44,3 +44,8 @@ export interface Budget {
   categories: Category[];
   expenses: Expense[];
 }
+
+export interface NetWorthSnapshot {
+  date: string; // ISO string in 'YYYY-MM-DD' format
+  netWorth: number;
+}

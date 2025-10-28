@@ -1,8 +1,8 @@
 
 
 import React, { useState, useMemo } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { Asset, Liability, Budget } from '../../types';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area } from 'recharts';
+import { Asset, Liability, Budget, NetWorthSnapshot } from '../../types';
 import { Button } from './ui/Button';
 import { AddLiabilityModal } from './modals/AddLiabilityModal';
 
@@ -11,6 +11,7 @@ interface NetWorthDashboardProps {
     liabilities: Liability[];
     onSaveLiabilities: (liabilities: Liability[]) => void;
     activeBudget: Budget | undefined;
+    netWorthHistory: NetWorthSnapshot[];
 }
 
 const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088fe', '#00c49f', '#ffbb28', '#ff82a9', '#a2d2ff'];
@@ -33,7 +34,7 @@ const LiabilityRow: React.FC<{ liability: Liability, onEdit: () => void, onDelet
 );
 
 
-export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, liabilities, onSaveLiabilities, activeBudget }) => {
+export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, liabilities, onSaveLiabilities, activeBudget, netWorthHistory }) => {
     const [liabilityModalOpen, setLiabilityModalOpen] = useState(false);
     const [editingLiability, setEditingLiability] = useState<Liability | null>(null);
 
@@ -101,6 +102,12 @@ export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, li
             onSaveLiabilities(liabilities.filter(l => l.id !== id));
         }
     }
+    
+    const formatDateTick = (tickItem: string) => {
+        const date = new Date(tickItem);
+        // show month and day
+        return `${date.getUTCMonth() + 1}/${date.getUTCDate()}`;
+    };
 
     return (
         <div className="space-y-8">
@@ -118,6 +125,36 @@ export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, li
                     <h3 className="text-slate-400 text-lg">Net Worth</h3>
                     <p className={`text-4xl font-bold ${netWorth >= 0 ? 'text-purple-400' : 'text-orange-500'}`}>${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
+            </div>
+
+            {/* Net Worth History Chart */}
+            <div className="bg-slate-800 p-6 rounded-xl shadow-lg">
+                <h3 className="text-xl font-bold text-white mb-4">Net Worth Over Time</h3>
+                {netWorthHistory.length > 1 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={netWorthHistory} margin={{ top: 5, right: 20, left: 20, bottom: 5 }}>
+                            <defs>
+                                <linearGradient id="colorNetWorth" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
+                                    <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                            <XAxis dataKey="date" stroke="#94a3b8" tickFormatter={formatDateTick} />
+                            <YAxis stroke="#94a3b8" tickFormatter={(value) => `$${(value/1000).toFixed(0)}k`} domain={['auto', 'auto']}/>
+                            <Tooltip 
+                                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} 
+                                formatter={(value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                labelFormatter={(label) => new Date(label).toLocaleDateString()}
+                             />
+                            <Area type="monotone" dataKey="netWorth" name="Net Worth" stroke="#8884d8" strokeWidth={2} fillOpacity={1} fill="url(#colorNetWorth)" />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <p className="text-center h-[300px] flex items-center justify-center text-slate-500">
+                        Your net worth history will appear here once you have multiple data points.
+                    </p>
+                )}
             </div>
 
             {/* Charts Grid */}

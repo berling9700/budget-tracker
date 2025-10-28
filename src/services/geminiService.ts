@@ -29,8 +29,11 @@ export const parseCsvExpenses = async (
     Parse the following CSV data which represents a list of financial transactions.
     The CSV may or may not have headers, and columns for date, description, and amount might be in any order.
     Identify the date, a description/name for the transaction, and the amount.
-    For each transaction, assign it to the most relevant category from this list: ${categoryNames}.
-    If you cannot confidently assign an expense to one of the provided categories, assign it to a category named "Other".
+    For each transaction, assign it to the most relevant category from the provided list: ${categoryNames}.
+    - If a transaction fits well into an existing category, use that category name exactly as provided.
+    - If a transaction represents a common expense type but doesn't fit any existing category (e.g., a new 'Subscription' or 'Pet Supplies' expense), you are encouraged to create a logical, new category name for it.
+    - If you are truly unsure or the transaction is ambiguous, assign it to the category "Other".
+    This allows the app to learn and adapt to the user's spending habits.
     Today is ${new Date().toDateString()}. Use this for any transactions that lack a specific date.
     The amount might be in a credit/debit column; treat all numbers as positive expense amounts.
     Output a JSON object containing a list of these expenses.
@@ -65,7 +68,7 @@ export const parseCsvExpenses = async (
             },
             categoryName: {
               type: Type.STRING,
-              description: `The most appropriate category from the list: ${categoryNames}. If none match, use "Other".`,
+              description: `The most appropriate category. This can be one of the existing categories (${categoryNames}), a new logical category name you identify, or "Other" if it's unclear.`,
             },
           },
           required: ["name", "amount", "date", "categoryName"],
