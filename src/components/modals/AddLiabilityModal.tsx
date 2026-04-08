@@ -13,27 +13,31 @@ interface AddLiabilityModalProps {
 export const AddLiabilityModal: React.FC<AddLiabilityModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setName(initialData?.name || '');
       setAmount(initialData?.amount.toString() || '');
+      setError('');
     }
   }, [isOpen, initialData]);
 
   const handleSave = () => {
     const amountNum = parseFloat(amount);
     if (!name.trim() || isNaN(amountNum) || amountNum < 0) {
-      alert("Please provide a valid name and a positive amount.");
+      setError('Please provide a valid name and a positive amount.');
       return;
     }
+    setError('');
     onSave({ name, amount: amountNum });
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Edit Liability" : "Add Liability"}>
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Edit Liability" : "Add Liability"} closeOnBackdropClick={false}>
       <div className="space-y-4">
+        {error && <p className="text-red-400 text-sm">{error}</p>}
         <div>
           <label className="block text-sm font-medium text-slate-400 mb-1">Liability Name</label>
           <input

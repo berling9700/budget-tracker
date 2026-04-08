@@ -19,6 +19,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
   const [currentPrice, setCurrentPrice] = useState('');
   const [isFetching, setIsFetching] = useState(false);
   const [fetchError, setFetchError] = useState('');
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
@@ -27,6 +28,7 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
       setShares(initialData?.shares.toString() || '');
       setCurrentPrice(initialData?.currentPrice.toString() || '');
       setFetchError('');
+      setError('');
     } else {
       // Clear form on close
       setTicker('');
@@ -58,13 +60,14 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
     const currentPriceNum = parseFloat(currentPrice);
 
     if (!ticker.trim() || !name.trim() || isNaN(sharesNum) || isNaN(currentPriceNum) || sharesNum <= 0) {
-      alert("Please fill out all fields with valid numbers.");
+      setError('Please fill out all fields with valid numbers.');
       return;
     }
     
     // If editing, preserve the original purchase price. If new, set it to the current price.
     const purchasePriceToSave = initialData?.purchasePrice ?? currentPriceNum;
 
+    setError('');
     onSave({ 
         ticker: ticker.toUpperCase().trim(), 
         name, 
@@ -76,8 +79,9 @@ export const AddHoldingModal: React.FC<AddHoldingModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Edit Holding" : "Add Holding"}>
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Edit Holding" : "Add Holding"} closeOnBackdropClick={false}>
       <div className="space-y-4">
+        {error && <p className="text-red-400 text-sm">{error}</p>}
         <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Ticker Symbol</label>

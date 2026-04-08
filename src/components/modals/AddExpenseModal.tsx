@@ -5,8 +5,28 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/Modal';
 import { parseCsvExpenses, ParsedExpenseData } from '../../services/geminiService';
 import { Spinner } from '../ui/Spinner';
+import {
+  createHeaderSignature,
+  convertMappedCsvToExpenses,
+  CsvMapping,
+  CsvMappingPreset,
+  detectDelimiter,
+  findPresetByHeaders,
+  getCsvHeaders,
+  loadMappingPresets,
+  parseCsvRecords,
+  saveMappingPresets,
+  suggestMapping,
+} from '../../services/csvImportService';
 
-type ExpenseToReview = Partial<Omit<Expense, 'id'>> & { categoryName?: string };
+type ExpenseToReview = {
+  name: string;
+  amount: number;
+  date: string;
+  categoryId?: string;
+  importCategoryName?: string;
+  finalCategoryName?: string;
+};
 
 interface AddExpenseModalProps {
   isOpen: boolean;
@@ -16,6 +36,7 @@ interface AddExpenseModalProps {
 }
 
 type Mode = 'single' | 'bulk';
+type BulkParseMode = 'mapped' | 'ai';
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onSave, categories }) => {
   const [mode, setMode] = useState<Mode>('single');
@@ -32,6 +53,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [bulkParseMode, setBulkParseMode] = useState<BulkParseMode>('mapped');
+  const [delimiter, setDelimiter] = useState(',');
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [mapping, setMapping] = useState<CsvMapping>({ dateColumn: '', descriptionColumn: '', amountColumn: '', categoryColumn: '' });
+  const [mappingPresets, setMappingPresets] = useState<CsvMappingPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+  const [newPresetName, setNewPresetName] = useState('');
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<Set<number>>(new Set());
+  const [bulkCategoryId, setBulkCategoryId] = useState('');
 
 
   useEffect(() => {
@@ -47,12 +77,41 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       setError('');
       setIsLoading(false);
       setIsFullScreen(false);
+      setBulkParseMode('mapped');
+      setDelimiter(',');
+      setHeaders([]);
+      setMapping({ dateColumn: '', descriptionColumn: '', amountColumn: '', categoryColumn: '' });
+      const presets = loadMappingPresets();
+      setMappingPresets(presets);
+      setSelectedPresetId('');
+      setNewPresetName('');
+      setSelectedExpenseIds(new Set());
+      setBulkCategoryId('');
     }
   }, [isOpen, categories]);
+
+  const applyPresetOverrides = (expenses: ExpenseToReview[], presetId: string): ExpenseToReview[] => {
+    const preset = mappingPresets.find(p => p.id === presetId);
+    if (!preset) return expenses;
+
+    return expenses.map(expense => {
+      const importCategoryName = expense.importCategoryName || '';
+      if (!importCategoryName) return expense;
+      const overrideCategoryName = preset.categoryOverrides[importCategoryName];
+      if (!overrideCategoryName) return expense;
+      const targetCategory = categories.find(c => c.name === overrideCategoryName);
+      if (!targetCategory) return expense;
+      return {
+        ...expense,
+        categoryId: targetCategory.id,
+        finalCategoryName: targetCategory.name,
+      };
+    });
+  };
   
   const handleSingleSave = () => {
     if (!name || !amount || !categoryId || parseFloat(amount) <= 0 || !date) {
-      alert("Please fill out all fields and enter a valid amount and date.");
+      setError('Please fill out all fields and enter a valid amount and date.');
       return;
     }
     const [year, month, day] = date.split('-').map(Number);
@@ -64,6 +123,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       date: correctDate.toISOString(),
       categoryId
     }]);
+    setError('');
     onClose();
   };
 
@@ -72,35 +132,129 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        setCsvContent(e.target?.result as string);
+        const content = e.target?.result as string;
+        const detectedDelimiter = detectDelimiter(content);
+        const detectedHeaders = getCsvHeaders(content, detectedDelimiter);
+        setCsvContent(content);
+        setDelimiter(detectedDelimiter);
+        setHeaders(detectedHeaders);
+        setMapping(suggestMapping(detectedHeaders));
+        const matchedPreset = findPresetByHeaders(mappingPresets, detectedHeaders);
+        if (matchedPreset) {
+          setSelectedPresetId(matchedPreset.id);
+          setMapping(matchedPreset.mapping);
+          setDelimiter(matchedPreset.delimiter);
+        } else {
+          setSelectedPresetId('');
+        }
+        setSelectedExpenseIds(new Set());
+        setBulkCategoryId('');
       };
       reader.readAsText(file);
     }
   };
 
-  const handleParse = async () => {
+  const handleAiParse = async () => {
     if (!csvContent.trim()) return;
     setIsLoading(true);
     setError('');
     setParsedExpenses([]);
     try {
       const result = await parseCsvExpenses(csvContent, categories);
-      const expensesToReview = result.map(exp => {
-          const category = categories.find(c => c.name.toLowerCase() === exp.categoryName?.toLowerCase());
+      const expensesToReview: ExpenseToReview[] = result.map(exp => {
+          const importCategoryName = exp.categoryName?.trim();
+          const category = categories.find(c => c.name.toLowerCase() === importCategoryName?.toLowerCase());
           return {
-              name: exp.name,
-              amount: exp.amount,
-              date: exp.date,
-              categoryId: category?.id,
-              // Keep the original name if we couldn't find a category, so we can create it later.
-              categoryName: exp.categoryName,
+            name: exp.name,
+            amount: exp.amount,
+            date: exp.date,
+            categoryId: category?.id,
+            importCategoryName,
+            finalCategoryName: category?.name || importCategoryName,
           };
       });
-      setParsedExpenses(expensesToReview);
+      const withOverrides = selectedPresetId ? applyPresetOverrides(expensesToReview, selectedPresetId) : expensesToReview;
+      setParsedExpenses(withOverrides);
+      setSelectedExpenseIds(new Set());
     } catch (e: any) {
       setError(e.message || 'An unknown error occurred.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleMappedParse = () => {
+    if (!csvContent.trim()) return;
+    if (!mapping.dateColumn || !mapping.descriptionColumn || !mapping.amountColumn) {
+      setError('Date, description, and amount columns are required for mapped parsing.');
+      return;
+    }
+
+    try {
+      setError('');
+      const rows = parseCsvRecords(csvContent, delimiter);
+      const parsed = convertMappedCsvToExpenses(rows, mapping, categories);
+      setParsedExpenses(parsed.map(exp => {
+        const category = categories.find(c => c.name.toLowerCase() === exp.categoryName?.toLowerCase());
+        return {
+          name: exp.name,
+          amount: exp.amount,
+          date: exp.date,
+          categoryId: category?.id,
+          importCategoryName: exp.categoryName,
+          finalCategoryName: category?.name || exp.categoryName,
+        };
+      }));
+      setSelectedExpenseIds(new Set());
+      if (parsed.length === 0) {
+        setError('No valid expenses were parsed. Check mapping or CSV format.');
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to parse CSV using the selected mapping.');
+    }
+  };
+
+  const handleParse = async () => {
+    if (bulkParseMode === 'ai') {
+      await handleAiParse();
+    } else {
+      handleMappedParse();
+    }
+  };
+
+  const handleSavePreset = () => {
+    if (!newPresetName.trim()) {
+      setError('Enter a preset name before saving.');
+      return;
+    }
+    if (!mapping.dateColumn || !mapping.descriptionColumn || !mapping.amountColumn) {
+      setError('Map date, description, and amount columns before saving a preset.');
+      return;
+    }
+
+    const preset: CsvMappingPreset = {
+      id: `preset-${Date.now()}`,
+      name: newPresetName.trim(),
+      mapping,
+      delimiter,
+      headerSignature: createHeaderSignature(headers),
+      categoryOverrides: {},
+    };
+    const updated = [...mappingPresets, preset];
+    setMappingPresets(updated);
+    saveMappingPresets(updated);
+    setSelectedPresetId(preset.id);
+    setNewPresetName('');
+  };
+
+  const handleApplyPreset = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    const preset = mappingPresets.find(p => p.id === presetId);
+    if (!preset) return;
+    setMapping(preset.mapping);
+    setDelimiter(preset.delimiter);
+    if (parsedExpenses.length > 0) {
+      setParsedExpenses(applyPresetOverrides(parsedExpenses, presetId));
     }
   };
   
@@ -120,7 +274,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
             amount: exp.amount,
             date: exp.date,
             categoryId: exp.categoryId,
-            categoryName: !exp.categoryId ? exp.categoryName : undefined
+            categoryName: !exp.categoryId ? exp.finalCategoryName : undefined
         }))
         .filter(
             (exp: Record<string, any>): exp is (Omit<Expense, 'id' | 'categoryId'> & { categoryId?: string; categoryName?: string }) => 
@@ -128,19 +282,91 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
         );
     
     if (expensesToSave.length > 0) {
+      setError('');
       onSave(expensesToSave);
       onClose();
     } else {
-        alert("No valid expenses to add. Please check the parsed results or try parsing again.")
+        setError('No valid expenses to add. Please check the parsed results or try parsing again.');
     }
   };
   
   const handleExpenseChange = <T,>(index: number, field: keyof ExpenseToReview, value: T) => {
     const newExpenses = [...parsedExpenses];
     const newExpense = { ...newExpenses[index], [field]: value };
+    if (field === 'categoryId') {
+      const matchedCategory = categories.find(cat => cat.id === value);
+      newExpense.finalCategoryName = matchedCategory?.name || newExpense.finalCategoryName;
+    }
     newExpenses[index] = newExpense;
     setParsedExpenses(newExpenses);
   }
+
+  const handleToggleExpense = (index: number, checked: boolean) => {
+    setSelectedExpenseIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(index);
+      else next.delete(index);
+      return next;
+    });
+  };
+
+  const handleToggleAllExpenses = (checked: boolean) => {
+    if (!checked) {
+      setSelectedExpenseIds(new Set());
+      return;
+    }
+    setSelectedExpenseIds(new Set(parsedExpenses.map((_, index) => index)));
+  };
+
+  const handleApplyBulkCategory = () => {
+    if (!bulkCategoryId || selectedExpenseIds.size === 0) return;
+    const selectedCategory = categories.find(cat => cat.id === bulkCategoryId);
+    const updated = parsedExpenses.map((expense, index) => {
+      if (!selectedExpenseIds.has(index)) return expense;
+      return {
+        ...expense,
+        categoryId: bulkCategoryId,
+        finalCategoryName: selectedCategory?.name || expense.finalCategoryName,
+      };
+    });
+    setParsedExpenses(updated);
+    setSelectedExpenseIds(new Set());
+    setBulkCategoryId('');
+  };
+
+  const handleSaveAiMapping = () => {
+    if (!newPresetName.trim()) {
+      setError('Enter a mapping name before saving.');
+      return;
+    }
+    if (headers.length === 0) {
+      setError('Upload a CSV and parse with AI before saving a mapping.');
+      return;
+    }
+
+    const overrides: Record<string, string> = {};
+    parsedExpenses.forEach(expense => {
+      if (!expense.importCategoryName || !expense.finalCategoryName) return;
+      if (expense.importCategoryName !== expense.finalCategoryName) {
+        overrides[expense.importCategoryName] = expense.finalCategoryName;
+      }
+    });
+
+    const preset: CsvMappingPreset = {
+      id: `preset-${Date.now()}`,
+      name: newPresetName.trim(),
+      mapping,
+      delimiter,
+      headerSignature: createHeaderSignature(headers),
+      categoryOverrides: overrides,
+    };
+    const updatedPresets = [...mappingPresets, preset];
+    setMappingPresets(updatedPresets);
+    saveMappingPresets(updatedPresets);
+    setSelectedPresetId(preset.id);
+    setNewPresetName('');
+    setError('');
+  };
 
   const headerActions = (
     <button onClick={() => setIsFullScreen(!isFullScreen)} className="text-slate-400 hover:text-white transition-colors" aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}>
@@ -170,6 +396,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
         size={mode === 'bulk' ? 'xl' : 'md'}
         isFullScreen={mode === 'bulk' && isFullScreen}
         headerActions={mode === 'bulk' ? headerActions : undefined}
+        closeOnBackdropClick={false}
     >
         <div className="mb-4 border-b border-slate-700">
             <nav className="flex space-x-2">
@@ -214,6 +441,78 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
                   <label className="block text-sm font-medium text-slate-400 mb-1">Upload CSV File</label>
                   <input type="file" accept=".csv" onChange={handleFileChange} className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"/>
                 </div>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Parsing Mode</label>
+                    <select
+                      value={bulkParseMode}
+                      onChange={e => setBulkParseMode(e.target.value as BulkParseMode)}
+                      className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
+                    >
+                      <option value="mapped">Mapped Parser (fast and consistent)</option>
+                      <option value="ai">AI Parser (best for messy files)</option>
+                    </select>
+                  </div>
+                  {bulkParseMode === 'mapped' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-1">Saved Mapping Preset</label>
+                      <select
+                        value={selectedPresetId}
+                        onChange={e => handleApplyPreset(e.target.value)}
+                        className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
+                      >
+                        <option value="">No preset selected</option>
+                        {mappingPresets.map(preset => (
+                          <option key={preset.id} value={preset.id}>{preset.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+                {bulkParseMode === 'mapped' && headers.length > 0 && (
+                  <div className="mt-4 p-3 rounded-lg border border-slate-700 bg-slate-900/40 space-y-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Date Column</label>
+                        <select value={mapping.dateColumn} onChange={e => setMapping(prev => ({ ...prev, dateColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                          <option value="">Select column</option>
+                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Description Column</label>
+                        <select value={mapping.descriptionColumn} onChange={e => setMapping(prev => ({ ...prev, descriptionColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                          <option value="">Select column</option>
+                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Amount Column</label>
+                        <select value={mapping.amountColumn} onChange={e => setMapping(prev => ({ ...prev, amountColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                          <option value="">Select column</option>
+                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Category Column (Optional)</label>
+                        <select value={mapping.categoryColumn || ''} onChange={e => setMapping(prev => ({ ...prev, categoryColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
+                          <option value="">None</option>
+                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex flex-col md:flex-row md:items-center gap-2">
+                      <input
+                        type="text"
+                        value={newPresetName}
+                        onChange={e => setNewPresetName(e.target.value)}
+                        className="flex-1 bg-slate-700 border-slate-600 text-white rounded-md p-2"
+                        placeholder="Save this mapping as preset (e.g., Chase Checking)"
+                      />
+                      <Button variant="secondary" onClick={handleSavePreset}>Save Preset</Button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-end mt-4">
                   <Button onClick={handleParse} disabled={isLoading || !csvContent.trim()}>
                     {isLoading ? (
@@ -221,7 +520,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
                         <Spinner size="sm" className="mr-2" />
                         Parsing...
                       </span>
-                    ) : 'Parse CSV'}
+                    ) : bulkParseMode === 'ai' ? 'Parse CSV with AI' : 'Parse CSV with Mapping'}
                   </Button>
                 </div>
             </div>
@@ -231,19 +530,64 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
             {parsedExpenses.length > 0 && (
               <div className={`pt-4 border-t border-slate-700 ${isFullScreen ? 'flex-grow overflow-hidden flex flex-col space-y-3' : 'space-y-3'}`}>
                 <h3 className="text-lg font-semibold text-white flex-shrink-0">Review Parsed Expenses</h3>
+                <div className="bg-slate-900/40 border border-slate-700 rounded-lg p-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <label className="text-sm text-slate-300 inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={parsedExpenses.length > 0 && selectedExpenseIds.size === parsedExpenses.length}
+                        onChange={e => handleToggleAllExpenses(e.target.checked)}
+                      />
+                      Select all
+                    </label>
+                    <select
+                      value={bulkCategoryId}
+                      onChange={e => setBulkCategoryId(e.target.value)}
+                      className="bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm min-w-48"
+                    >
+                      <option value="">Bulk change category...</option>
+                      {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                    </select>
+                    <Button variant="secondary" onClick={handleApplyBulkCategory} disabled={!bulkCategoryId || selectedExpenseIds.size === 0}>
+                      Apply to Selected ({selectedExpenseIds.size})
+                    </Button>
+                  </div>
+                  {bulkParseMode === 'ai' && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={newPresetName}
+                        onChange={e => setNewPresetName(e.target.value)}
+                        className="flex-1 min-w-60 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm"
+                        placeholder="Save AI mapping name (e.g., Amex Monthly Import)"
+                      />
+                      <Button variant="secondary" onClick={handleSaveAiMapping}>Save Mapping</Button>
+                    </div>
+                  )}
+                </div>
                 <div className={`space-y-2 pr-2 overflow-y-auto ${isFullScreen ? 'flex-grow' : 'max-h-60'}`}>
                   {parsedExpenses.map((exp, index) => (
                     <div key={index} className="grid grid-cols-12 gap-2 items-center bg-slate-900/50 p-2 rounded-md">
-                       <input type="text" value={exp.name || ''} onChange={e => handleExpenseChange(index, 'name', e.target.value)} className="col-span-4 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
+                       <div className="col-span-1 flex justify-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedExpenseIds.has(index)}
+                            onChange={e => handleToggleExpense(index, e.target.checked)}
+                          />
+                       </div>
+                       <input type="text" value={exp.name || ''} onChange={e => handleExpenseChange(index, 'name', e.target.value)} className="col-span-3 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
                        <input type="number" value={exp.amount || ''} onChange={e => handleExpenseChange(index, 'amount', parseFloat(e.target.value))} className="col-span-2 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
-                       <input type="date" value={exp.date ? new Date(exp.date).toLocaleDateString('en-CA') : ''} onChange={e => handleExpenseChange(index, 'date', e.target.value)} className="col-span-3 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
-                       <div className="col-span-3">
+                       <input type="date" value={exp.date ? new Date(exp.date).toLocaleDateString('en-CA') : ''} onChange={e => handleExpenseChange(index, 'date', e.target.value)} className="col-span-2 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
+                       <div className="col-span-4">
                            <select value={exp.categoryId || ''} onChange={e => handleExpenseChange(index, 'categoryId', e.target.value)} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm">
                                <option value="">
-                                 {exp.categoryName && !exp.categoryId ? `New: ${exp.categoryName}` : 'Select Category'}
+                                 {exp.finalCategoryName && !exp.categoryId ? `New: ${exp.finalCategoryName}` : 'Select Category'}
                                </option>
                                {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                            </select>
+                           {exp.importCategoryName && (
+                             <p className="text-[11px] text-slate-400 mt-1">Imported category: {exp.importCategoryName}</p>
+                           )}
                        </div>
                     </div>
                   ))}

@@ -18,6 +18,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose, o
   const [name, setName] = useState('');
   const [type, setType] = useState<AssetType>('Brokerage');
   const [value, setValue] = useState('');
+  const [error, setError] = useState('');
 
   const isValueType = typesWithValue.includes(type);
 
@@ -26,12 +27,13 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose, o
       setName(initialData?.name || '');
       setType(initialData?.type || 'Brokerage');
       setValue(initialData?.value?.toString() || '');
+      setError('');
     }
   }, [isOpen, initialData]);
 
   const handleSave = () => {
     if (!name.trim()) {
-      alert("Please enter an asset name.");
+      setError('Please enter an asset name.');
       return;
     }
 
@@ -40,7 +42,7 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose, o
     if (isValueType) {
         const valueNum = parseFloat(value);
         if (isNaN(valueNum) || valueNum < 0) {
-            alert("Please enter a valid, positive value for the asset.");
+            setError('Please enter a valid, positive value for the asset.');
             return;
         }
         assetData = { name, type, value: valueNum };
@@ -48,13 +50,15 @@ export const AddAssetModal: React.FC<AddAssetModalProps> = ({ isOpen, onClose, o
         assetData = { name, type, holdings: initialData?.holdings || [] };
     }
     
+    setError('');
     onSave(assetData);
     onClose();
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Edit Asset" : "Add Asset"}>
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? "Edit Asset" : "Add Asset"} closeOnBackdropClick={false}>
       <div className="space-y-4">
+        {error && <p className="text-red-400 text-sm">{error}</p>}
         <div>
           <label className="block text-sm font-medium text-slate-400 mb-1">Asset Name</label>
           <input

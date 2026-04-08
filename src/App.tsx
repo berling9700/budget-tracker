@@ -12,10 +12,19 @@ import { BudgetView } from './components/BudgetView';
 import { AssetsDashboard } from './components/InvestmentsDashboard';
 import { NetWorthDashboard } from './components/NetWorthDashboard';
 import { Chatbot } from './components/ui/Chatbot';
+import {
+  clearLegacyBudgetData,
+  loadAppData,
+  loadLegacyBudgetData,
+  loadSettings as loadStoredSettings,
+  saveAppData,
+  saveSettings as saveStoredSettings,
+} from './services/storageService';
 
 type ModalType = 'setup' | 'addExpense' | 'addAsset' | 'settings' | null;
 type ExpenseData = Omit<Expense, 'id' | 'categoryId'> & { categoryId?: string; categoryName?: string };
 type Page = 'dashboard' | 'budgets' | 'assets';
+type AppNoticeType = 'success' | 'warning' | 'error' | 'info';
 
 interface AppSettings {
     alphaVantageApiKey?: string;
@@ -82,13 +91,12 @@ const App: React.FC = () => {
   // General State
   const [isLoading, setIsLoading] = useState(true);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [appNotice, setAppNotice] = useState<{ type: AppNoticeType; message: string } | null>(null);
 
   useEffect(() => {
     try {
-      // New data structure
-      const appDataString = localStorage.getItem('budget-tracker-app-data');
-      if (appDataString) {
-          const appData = JSON.parse(appDataString);
+      const appData = loadAppData();
+      if (appData) {
           setBudgets(appData.budgets || []);
           setAssets(appData.assets || appData.investmentAccounts || []); // Migration from investmentAccounts
           setLiabilities(appData.liabilities || []);
@@ -99,32 +107,27 @@ const App: React.FC = () => {
           } else if ((appData.budgets || []).length > 0) {
             setActiveBudgetId(appData.budgets[0].id);
           }
-          // Load settings
-          const savedSettings = localStorage.getItem('budget-tracker-settings');
-            if (savedSettings) {
-                setSettings(JSON.parse(savedSettings));
-            }
+          const savedSettings = loadStoredSettings<AppSettings>();
+          if (savedSettings) {
+            setSettings(savedSettings);
+          }
           return;
       }
 
-      // Legacy data migration for budgets
-      const savedBudgets = localStorage.getItem('budget-tracker-data');
-      const savedActiveId = localStorage.getItem('budget-tracker-active-id');
-      if (savedBudgets) {
-        const parsedBudgets = JSON.parse(savedBudgets);
+      const legacyData = loadLegacyBudgetData();
+      if (legacyData) {
+        const parsedBudgets = legacyData.budgets;
         setBudgets(parsedBudgets);
-        if (savedActiveId && parsedBudgets.find((b: Budget) => b.id === savedActiveId)) {
-            setActiveBudgetId(savedActiveId);
+        if (legacyData.activeBudgetId && parsedBudgets.find((b: Budget) => b.id === legacyData.activeBudgetId)) {
+            setActiveBudgetId(legacyData.activeBudgetId);
         } else if (parsedBudgets.length > 0) {
             setActiveBudgetId(parsedBudgets[0].id);
         }
-        // Save migrated data to new structure
-        saveAllData({ budgets: parsedBudgets, activeBudgetId: savedActiveId, assets: [], liabilities: [], netWorthHistory: [] });
-        localStorage.removeItem('budget-tracker-data');
-        localStorage.removeItem('budget-tracker-active-id');
+        saveAppData({ budgets: parsedBudgets, activeBudgetId: legacyData.activeBudgetId, assets: [], liabilities: [], netWorthHistory: [] });
+        clearLegacyBudgetData();
       }
     } catch (error) {
-        console.error("Failed to load data from localStorage", error);
+        console.error('Failed to load persisted data', error);
     } finally {
         setIsLoading(false);
     }
@@ -142,18 +145,7 @@ const App: React.FC = () => {
   }, [page, activeBudget]);
 
   const saveAllData = useCallback((data: { budgets: Budget[], activeBudgetId: string | null, assets: Asset[], liabilities: Liability[], netWorthHistory: NetWorthSnapshot[] }) => {
-    try {
-        const dataToSave = {
-            budgets: data.budgets,
-            activeBudgetId: data.activeBudgetId,
-            assets: data.assets,
-            liabilities: data.liabilities,
-            netWorthHistory: data.netWorthHistory,
-        };
-        localStorage.setItem('budget-tracker-app-data', JSON.stringify(dataToSave));
-    } catch (error) {
-        console.error("Failed to save data to localStorage", error);
-    }
+    saveAppData(data);
   }, []);
 
   const saveBudgets = useCallback((newBudgets: Budget[], newActiveId?: string | null) => {
@@ -179,11 +171,7 @@ const App: React.FC = () => {
 
   const saveSettings = useCallback((newSettings: AppSettings) => {
     setSettings(newSettings);
-    try {
-        localStorage.setItem('budget-tracker-settings', JSON.stringify(newSettings));
-    } catch (error) {
-        console.error("Failed to save settings", error);
-    }
+    saveStoredSettings(newSettings);
   }, []);
 
   // BUDGET HANDLERS
@@ -228,7 +216,10 @@ const App: React.FC = () => {
 
       if (skippedExpenses.length > 0) {
           const skippedYears = [...new Set(skippedExpenses.map(e => new Date(e.date).getFullYear()))];
-          alert(`Some expenses were not added because their year did not match the active budget's year (${activeBudget.year}). Skipped expenses for years: ${skippedYears.join(', ')}`);
+          setAppNotice({
+            type: 'warning',
+            message: `Some expenses were skipped because they did not match budget year ${activeBudget.year}. Skipped years: ${skippedYears.join(', ')}.`,
+          });
       }
       
       if (expensesForActiveBudget.length === 0) return;
@@ -319,7 +310,7 @@ const App: React.FC = () => {
     const expensesInView = viewMonth === 0 ? activeBudget.expenses : activeBudget.expenses.filter(exp => new Date(exp.date).getUTCMonth() + 1 === viewMonth);
 
     if (expensesInView.length === 0) {
-        alert(`There are no expenses to delete for ${viewName}.`);
+        setAppNotice({ type: 'info', message: `There are no expenses to delete for ${viewName}.` });
         return;
     }
     if (window.confirm(`Are you sure you want to delete all ${expensesInView.length} expense(s) for ${viewName}? This action cannot be undone.`)) {
@@ -358,7 +349,7 @@ const App: React.FC = () => {
   const handleExportData = () => {
     const data = { budgets, activeBudgetId, assets, liabilities, settings, netWorthHistory };
     if (budgets.length === 0 && assets.length === 0 && liabilities.length === 0) {
-        alert("No data to export.");
+        setAppNotice({ type: 'info', message: 'No data to export.' });
         return;
     }
     const dataStr = JSON.stringify(data, null, 2);
@@ -399,10 +390,10 @@ const App: React.FC = () => {
                 setActiveBudgetId(newActiveId);
                 saveAllData({ budgets: importedBudgets, activeBudgetId: newActiveId, assets: importedAssets, liabilities: importedLiabilities, netWorthHistory: importedNetWorthHistory });
                 saveSettings(importedSettings);
-                alert("Data imported successfully!");
+                setAppNotice({ type: 'success', message: 'Data imported successfully.' });
             }
         } catch (error: any) {
-            alert(`Failed to import data: ${error.message}`);
+            setAppNotice({ type: 'error', message: `Failed to import data: ${error.message}` });
             console.error("Import error:", error);
         } finally {
             if (event.target) event.target.value = '';
@@ -424,6 +415,24 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
+        {appNotice && (
+          <div
+            className={`mb-4 rounded-lg border px-4 py-3 text-sm flex items-start justify-between gap-3 ${
+              appNotice.type === 'success'
+                ? 'bg-emerald-900/30 border-emerald-700 text-emerald-300'
+                : appNotice.type === 'warning'
+                ? 'bg-purple-900/30 border-purple-700 text-purple-200'
+                : appNotice.type === 'error'
+                ? 'bg-rose-900/30 border-rose-700 text-rose-300'
+                : 'bg-slate-800 border-slate-700 text-slate-200'
+            }`}
+          >
+            <span>{appNotice.message}</span>
+            <button onClick={() => setAppNotice(null)} className="text-slate-300 hover:text-white" aria-label="Dismiss notice">
+              x
+            </button>
+          </div>
+        )}
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <div>
                 <h1 className="text-4xl font-bold text-white tracking-tight">Financial Tracker</h1>

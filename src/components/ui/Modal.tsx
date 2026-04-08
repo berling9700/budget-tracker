@@ -9,9 +9,19 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl';
   isFullScreen?: boolean;
   headerActions?: React.ReactNode;
+  closeOnBackdropClick?: boolean;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md', isFullScreen = false, headerActions }) => {
+export const Modal: React.FC<ModalProps> = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  isFullScreen = false,
+  headerActions,
+  closeOnBackdropClick = true,
+}) => {
   useEffect(() => {
     const handleEsc = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -37,8 +47,14 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
   const containerClasses = `bg-slate-800 flex flex-col ${isFullScreen ? 'w-screen h-screen' : `rounded-xl shadow-2xl w-full ${sizeClasses[size]}`}`;
   const contentWrapperClasses = ` ${isFullScreen ? 'flex-grow overflow-y-auto' : 'overflow-y-auto max-h-[80vh]'}`;
 
+  const handleBackdropClick = () => {
+    if (closeOnBackdropClick) {
+      onClose();
+    }
+  };
+
   return (
-    <div className={overlayClasses} onClick={onClose}>
+    <div className={overlayClasses} onClick={handleBackdropClick}>
       <div className={containerClasses} onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-4 border-b border-slate-700 flex-shrink-0">
           <h2 className="text-xl font-bold text-white">{title}</h2>

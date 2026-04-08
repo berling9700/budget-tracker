@@ -123,7 +123,7 @@ export const NetWorthDashboard: React.FC<NetWorthDashboardProps> = ({ assets, li
                 </div>
                 <div className="bg-slate-800 p-6 rounded-xl shadow-lg text-center">
                     <h3 className="text-slate-400 text-lg">Net Worth</h3>
-                    <p className={`text-4xl font-bold ${netWorth >= 0 ? 'text-purple-400' : 'text-orange-500'}`}>${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className={`text-4xl font-bold ${netWorth >= 0 ? 'text-purple-400' : 'text-rose-400'}`}>${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
             </div>
 

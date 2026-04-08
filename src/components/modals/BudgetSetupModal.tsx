@@ -19,6 +19,7 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
   const [categories, setCategories] = useState<Category[]>([{ id: `cat-${Date.now()}`, name: '', budgeted: 0 }]);
   const [copyFromBudgetId, setCopyFromBudgetId] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [error, setError] = useState('');
   
   const resetForm = (budget?: Budget | null) => {
     setName(budget?.name || `${new Date().getFullYear()} Budget`);
@@ -31,6 +32,7 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
     if (isOpen) {
         resetForm(initialBudget);
         setIsFullScreen(false);
+        setError('');
     }
   }, [isOpen, initialBudget]);
 
@@ -79,7 +81,7 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
         });
         onClose();
     } else {
-        alert("Please provide a budget name and at least one category.");
+        setError('Please provide a budget name and at least one category.');
     }
   };
 
@@ -113,8 +115,9 @@ export const BudgetSetupModal: React.FC<BudgetSetupModalProps> = ({ isOpen, onCl
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialBudget ? "Edit Budget" : "Create Budget"} size="lg" isFullScreen={isFullScreen} headerActions={headerActions}>
+    <Modal isOpen={isOpen} onClose={onClose} title={initialBudget ? "Edit Budget" : "Create Budget"} size="lg" isFullScreen={isFullScreen} headerActions={headerActions} closeOnBackdropClick={false}>
       <div className={isFullScreen ? 'flex flex-col h-full space-y-4' : 'space-y-6'}>
+        {error && <p className="text-red-400 text-sm">{error}</p>}
         <div className={isFullScreen ? 'flex-shrink-0' : ''}>
           {!initialBudget && allBudgets && allBudgets.length > 0 && (
               <div className="mb-6">

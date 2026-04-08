@@ -93,12 +93,14 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkChangeCategoryId, setBulkChangeCategoryId] = useState<string>('');
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [error, setError] = useState('');
   
   useEffect(() => {
     if(isOpen) {
         setSelectedIds(new Set());
         setBulkChangeCategoryId('');
         setIsFullScreen(false); // Reset on open
+        setError('');
     }
   }, [isOpen]);
 
@@ -136,7 +138,7 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
 
   const handleChangeSelectedCategory = () => {
     if (!bulkChangeCategoryId) {
-      alert("Please select a category to move the expenses to.");
+      setError('Please select a category to move the expenses to.');
       return;
     }
     if (selectedIds.size === 0) return;
@@ -144,6 +146,7 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
     onUpdateMultipleExpensesCategory(Array.from(selectedIds), bulkChangeCategoryId);
     setSelectedIds(new Set());
     setBulkChangeCategoryId('');
+    setError('');
   };
 
   const isAllSelected = expenses.length > 0 && selectedIds.size === expenses.length;
@@ -176,8 +179,10 @@ export const CategoryDetailModal: React.FC<CategoryDetailModalProps> = ({ isOpen
         size="lg"
         isFullScreen={isFullScreen}
         headerActions={headerActions}
+        closeOnBackdropClick={false}
     >
       <div className={isFullScreen ? 'flex flex-col h-full space-y-4' : 'space-y-4'}>
+        {error && <p className="text-red-400 text-sm">{error}</p>}
         <div className="bg-slate-700/50 p-4 rounded-lg flex justify-between items-center flex-shrink-0">
             <div>
                 <div className="text-slate-400 text-sm">Total Budgeted</div>

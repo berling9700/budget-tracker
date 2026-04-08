@@ -18,16 +18,33 @@ interface BudgetViewProps {
 const MonthSelector: React.FC<{selectedMonth: number, onSelectMonth: (month: number) => void}> = ({selectedMonth, onSelectMonth}) => {
     const months = ["Annual", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return (
-        <div className="flex flex-wrap gap-1 md:gap-2 items-center bg-slate-800/50 p-2 rounded-lg mb-8">
-            {months.map((month, index) => (
-                <button
-                    key={index}
-                    onClick={() => onSelectMonth(index)}
-                    className={`flex-1 text-center px-2 py-1 text-sm font-semibold rounded-md transition-colors ${selectedMonth === index ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+        <div className="mb-8">
+            <div className="sm:hidden">
+                <label htmlFor="month-selector" className="sr-only">Select month view</label>
+                <select
+                    id="month-selector"
+                    value={selectedMonth}
+                    onChange={e => onSelectMonth(Number(e.target.value))}
+                    className="w-full bg-slate-800 border border-slate-700 text-slate-100 rounded-lg p-3"
                 >
-                    {month}
-                </button>
-            ))}
+                    {months.map((month, index) => (
+                        <option key={index} value={index}>
+                            {month}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            <div className="hidden sm:flex flex-wrap gap-1 md:gap-2 items-center bg-slate-800/50 p-2 rounded-lg">
+                {months.map((month, index) => (
+                    <button
+                        key={index}
+                        onClick={() => onSelectMonth(index)}
+                        className={`flex-1 text-center px-2 py-1 text-sm font-semibold rounded-md transition-colors ${selectedMonth === index ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+                    >
+                        {month}
+                    </button>
+                ))}
+            </div>
         </div>
     )
 }
