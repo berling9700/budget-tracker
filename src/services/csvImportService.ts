@@ -15,6 +15,8 @@ export interface CsvMappingPreset {
   delimiter: string;
   headerSignature: string[];
   categoryOverrides: Record<string, string>;
+  categoryMappings?: Record<string, string>; // Maps importCategoryName/csvCategoryName to categoryId
+  csvCategoryNames?: string[]; // Track which CSV category values were in the original import
 }
 
 const PRESETS_KEY = 'budget-tracker-csv-mapping-presets';
@@ -218,6 +220,8 @@ export const loadMappingPresets = (): CsvMappingPreset[] => {
       ...preset,
       headerSignature: Array.isArray(preset.headerSignature) ? preset.headerSignature : [],
       categoryOverrides: preset.categoryOverrides || {},
+      categoryMappings: preset.categoryMappings || {},
+      csvCategoryNames: Array.isArray(preset.csvCategoryNames) ? preset.csvCategoryNames : [],
     }));
   } catch {
     return [];
