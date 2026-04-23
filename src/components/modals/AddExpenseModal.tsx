@@ -91,14 +91,19 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     }
   }, [isOpen, categories]);
 
+  const normalizeMappingKey = (value?: string): string | undefined => {
+    const normalized = value?.trim().toLowerCase();
+    return normalized ? normalized : undefined;
+  };
+
   const applyPresetOverrides = (expenses: ExpenseToReview[], presetId: string): ExpenseToReview[] => {
     const preset = mappingPresets.find(p => p.id === presetId);
     if (!preset) return expenses;
 
     return expenses.map(expense => {
-      // Try CSV category name first (literal CSV value from the column)
-      if (expense.csvCategoryName && preset.categoryMappings && preset.categoryMappings[expense.csvCategoryName]) {
-        const targetCategoryId = preset.categoryMappings[expense.csvCategoryName];
+      const csvKey = normalizeMappingKey(expense.csvCategoryName);
+      if (csvKey && preset.categoryMappings && preset.categoryMappings[csvKey]) {
+        const targetCategoryId = preset.categoryMappings[csvKey];
         const targetCategory = categories.find(c => c.id === targetCategoryId);
         if (targetCategory) {
           return {
@@ -108,13 +113,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
           };
         }
       }
-      
-      // Fall back to import category name (AI suggestion or matched keyword)
-      const importCategoryName = expense.importCategoryName || '';
-      if (!importCategoryName) return expense;
-      
-      if (preset.categoryMappings && preset.categoryMappings[importCategoryName]) {
-        const targetCategoryId = preset.categoryMappings[importCategoryName];
+
+      const importKey = normalizeMappingKey(expense.importCategoryName);
+      if (!importKey) return expense;
+
+      if (preset.categoryMappings && preset.categoryMappings[importKey]) {
+        const targetCategoryId = preset.categoryMappings[importKey];
         const targetCategory = categories.find(c => c.id === targetCategoryId);
         if (targetCategory) {
           return {
@@ -124,12 +128,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
           };
         }
       }
-      
-      // Fallback to categoryOverrides for backwards compatibility (maps importCategoryName to categoryName)
-      const overrideCategoryName = preset.categoryOverrides[importCategoryName];
+
+      const overrideCategoryName = preset.categoryOverrides[importKey];
       if (!overrideCategoryName) return expense;
-      const targetCategory = categories.find(c => c.name === overrideCategoryName);
+      const targetCategory = categories.find(c => c.name.toLowerCase() === overrideCategoryName.toLowerCase());
       if (!targetCategory) return expense;
+
       return {
         ...expense,
         categoryId: targetCategory.id,
@@ -276,33 +280,34 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     }
   };
 
-  const buildCategoryMappings = (): { mappings: Record<string, string>; csvCategoryNames: string[] } => {
+  const buildCategoryMappings = (): { mappings: Record<string, string>; categoryOverrides: Record<string, string>; csvCategoryNames: string[] } => {
     const mappings: Record<string, string> = {};
+    const categoryOverrides: Record<string, string> = {};
     const csvCategoryNames: string[] = [];
-    
+
     parsedExpenses.forEach(expense => {
-      // Only create mappings for expenses that have both import category and a final category ID
-      if (expense.categoryId) {
-        // Map importCategoryName if available (AI or matched suggestion)
-        if (expense.importCategoryName) {
-          mappings[expense.importCategoryName] = expense.categoryId;
-        }
-        
-        // Map csvCategoryName if available and different from importCategoryName (raw CSV value)
-        if (expense.csvCategoryName && expense.csvCategoryName !== expense.importCategoryName) {
-          mappings[expense.csvCategoryName] = expense.categoryId;
-          if (!csvCategoryNames.includes(expense.csvCategoryName)) {
-            csvCategoryNames.push(expense.csvCategoryName);
-          }
-        } else if (expense.csvCategoryName) {
-          if (!csvCategoryNames.includes(expense.csvCategoryName)) {
-            csvCategoryNames.push(expense.csvCategoryName);
-          }
+      if (!expense.categoryId) return;
+
+      const importKey = normalizeMappingKey(expense.importCategoryName);
+      const csvKey = normalizeMappingKey(expense.csvCategoryName);
+
+      if (importKey) {
+        mappings[importKey] = expense.categoryId;
+        if (expense.finalCategoryName) {
+          categoryOverrides[importKey] = expense.finalCategoryName;
         }
       }
+
+      if (csvKey && csvKey !== importKey) {
+        mappings[csvKey] = expense.categoryId;
+      }
+
+      if (expense.csvCategoryName && !csvCategoryNames.includes(expense.csvCategoryName)) {
+        csvCategoryNames.push(expense.csvCategoryName);
+      }
     });
-    
-    return { mappings, csvCategoryNames };
+
+    return { mappings, categoryOverrides, csvCategoryNames };
   };
 
   const handleSavePreset = () => {
@@ -315,14 +320,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       return;
     }
 
-    const { mappings, csvCategoryNames } = buildCategoryMappings();
+    const { mappings, categoryOverrides, csvCategoryNames } = buildCategoryMappings();
     const preset: CsvMappingPreset = {
       id: `preset-${Date.now()}`,
       name: newPresetName.trim(),
       mapping,
       delimiter,
       headerSignature: createHeaderSignature(headers),
-      categoryOverrides: {},
+      categoryOverrides,
       categoryMappings: mappings,
       csvCategoryNames,
     };
@@ -430,22 +435,14 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       return;
     }
 
-    const overrides: Record<string, string> = {};
-    parsedExpenses.forEach(expense => {
-      if (!expense.importCategoryName || !expense.finalCategoryName) return;
-      if (expense.importCategoryName !== expense.finalCategoryName) {
-        overrides[expense.importCategoryName] = expense.finalCategoryName;
-      }
-    });
-
-    const { mappings, csvCategoryNames } = buildCategoryMappings();
+    const { mappings, categoryOverrides, csvCategoryNames } = buildCategoryMappings();
     const preset: CsvMappingPreset = {
       id: `preset-${Date.now()}`,
       name: newPresetName.trim(),
       mapping,
       delimiter,
       headerSignature: createHeaderSignature(headers),
-      categoryOverrides: overrides,
+      categoryOverrides,
       categoryMappings: mappings,
       csvCategoryNames,
     };

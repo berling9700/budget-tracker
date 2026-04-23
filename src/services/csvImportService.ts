@@ -24,6 +24,16 @@ const DEFAULT_DELIMITER = ',';
 
 const normalize = (value: string): string => value.trim().toLowerCase();
 
+const normalizeMappingKeys = (values: Record<string, string>): Record<string, string> => {
+  return Object.entries(values).reduce((result, [key, value]) => {
+    const normalizedKey = normalize(key);
+    if (normalizedKey) {
+      result[normalizedKey] = value;
+    }
+    return result;
+  }, {} as Record<string, string>);
+};
+
 export const createHeaderSignature = (headers: string[]): string[] => {
   return [...new Set(headers.map(normalize).filter(Boolean))].sort();
 };
@@ -219,8 +229,8 @@ export const loadMappingPresets = (): CsvMappingPreset[] => {
     return parsed.map(preset => ({
       ...preset,
       headerSignature: Array.isArray(preset.headerSignature) ? preset.headerSignature : [],
-      categoryOverrides: preset.categoryOverrides || {},
-      categoryMappings: preset.categoryMappings || {},
+      categoryOverrides: normalizeMappingKeys(preset.categoryOverrides || {}),
+      categoryMappings: normalizeMappingKeys(preset.categoryMappings || {}),
       csvCategoryNames: Array.isArray(preset.csvCategoryNames) ? preset.csvCategoryNames : [],
     }));
   } catch {
