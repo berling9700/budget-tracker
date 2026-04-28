@@ -34,6 +34,54 @@ const normalizeMappingKeys = (values: Record<string, string>): Record<string, st
   }, {} as Record<string, string>);
 };
 
+export const normalizeMappingKey = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  const normalized = normalize(value);
+  return normalized ? normalized : undefined;
+};
+
+export const applyPresetToParsedRows = (
+  rows: Array<Record<string, any>>,
+  preset: CsvMappingPreset | undefined,
+  categories: Category[],
+): Array<Record<string, any>> => {
+  if (!preset) return rows;
+  const mappings = preset.categoryMappings || {};
+  const overrides = preset.categoryOverrides || {};
+
+  return rows.map(row => {
+    const csvKey = normalizeMappingKey(row.csvCategoryName);
+    if (csvKey && mappings[csvKey]) {
+      const targetCategoryId = mappings[csvKey];
+      const targetCategory = categories.find(c => c.id === targetCategoryId);
+      if (targetCategory) {
+        return { ...row, categoryId: targetCategory.id, finalCategoryName: targetCategory.name };
+      }
+    }
+
+    const importKey = normalizeMappingKey(row.importCategoryName);
+    if (importKey && mappings[importKey]) {
+      const targetCategoryId = mappings[importKey];
+      const targetCategory = categories.find(c => c.id === targetCategoryId);
+      if (targetCategory) {
+        return { ...row, categoryId: targetCategory.id, finalCategoryName: targetCategory.name };
+      }
+    }
+
+    if (importKey) {
+      const overrideCategoryName = overrides[importKey];
+      if (overrideCategoryName) {
+        const targetCategory = categories.find(c => normalize(c.name) === normalize(overrideCategoryName));
+        if (targetCategory) {
+          return { ...row, categoryId: targetCategory.id, finalCategoryName: targetCategory.name };
+        }
+      }
+    }
+
+    return row;
+  });
+};
+
 export const createHeaderSignature = (headers: string[]): string[] => {
   return [...new Set(headers.map(normalize).filter(Boolean))].sort();
 };

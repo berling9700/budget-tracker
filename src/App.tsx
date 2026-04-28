@@ -11,7 +11,6 @@ import { Nav } from './components/ui/Nav';
 import { BudgetView } from './components/BudgetView';
 import { AssetsDashboard } from './components/InvestmentsDashboard';
 import { NetWorthDashboard } from './components/NetWorthDashboard';
-import { Chatbot } from './components/ui/Chatbot';
 import {
   clearLegacyBudgetData,
   loadAppData,
@@ -575,12 +574,6 @@ const App: React.FC = () => {
         initialData={assetToEdit}
       />
 
-      <Chatbot
-        page={page}
-        budgets={budgets}
-        assets={assets}
-        liabilities={liabilities}
-       />
     </div>
   );
 };

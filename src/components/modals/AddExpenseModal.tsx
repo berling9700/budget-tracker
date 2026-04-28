@@ -7,16 +7,16 @@ import { parseCsvExpenses, ParsedExpenseData } from '../../services/geminiServic
 import { Spinner } from '../ui/Spinner';
 import {
   createHeaderSignature,
-  convertMappedCsvToExpenses,
-  CsvMapping,
-  CsvMappingPreset,
   detectDelimiter,
   findPresetByHeaders,
   getCsvHeaders,
   loadMappingPresets,
   parseCsvRecords,
-  saveMappingPresets,
+  convertMappedCsvToExpenses,
   suggestMapping,
+  saveMappingPresets,
+  applyPresetToParsedRows,
+  CsvMappingPreset,
 } from '../../services/csvImportService';
 
 type ExpenseToReview = {
@@ -37,7 +37,6 @@ interface AddExpenseModalProps {
 }
 
 type Mode = 'single' | 'bulk';
-type BulkParseMode = 'mapped' | 'ai';
 
 export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClose, onSave, categories }) => {
   const [mode, setMode] = useState<Mode>('single');
@@ -54,10 +53,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [bulkParseMode, setBulkParseMode] = useState<BulkParseMode>('mapped');
   const [delimiter, setDelimiter] = useState(',');
   const [headers, setHeaders] = useState<string[]>([]);
-  const [mapping, setMapping] = useState<CsvMapping>({ dateColumn: '', descriptionColumn: '', amountColumn: '', categoryColumn: '' });
   const [mappingPresets, setMappingPresets] = useState<CsvMappingPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState('');
   const [newPresetName, setNewPresetName] = useState('');
@@ -78,10 +75,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       setError('');
       setIsLoading(false);
       setIsFullScreen(false);
-      setBulkParseMode('mapped');
       setDelimiter(',');
       setHeaders([]);
-      setMapping({ dateColumn: '', descriptionColumn: '', amountColumn: '', categoryColumn: '' });
       const presets = loadMappingPresets();
       setMappingPresets(presets);
       setSelectedPresetId('');
@@ -91,56 +86,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     }
   }, [isOpen, categories]);
 
-  const normalizeMappingKey = (value?: string): string | undefined => {
-    const normalized = value?.trim().toLowerCase();
-    return normalized ? normalized : undefined;
-  };
 
-  const applyPresetOverrides = (expenses: ExpenseToReview[], presetId: string): ExpenseToReview[] => {
-    const preset = mappingPresets.find(p => p.id === presetId);
-    if (!preset) return expenses;
-
-    return expenses.map(expense => {
-      const csvKey = normalizeMappingKey(expense.csvCategoryName);
-      if (csvKey && preset.categoryMappings && preset.categoryMappings[csvKey]) {
-        const targetCategoryId = preset.categoryMappings[csvKey];
-        const targetCategory = categories.find(c => c.id === targetCategoryId);
-        if (targetCategory) {
-          return {
-            ...expense,
-            categoryId: targetCategory.id,
-            finalCategoryName: targetCategory.name,
-          };
-        }
-      }
-
-      const importKey = normalizeMappingKey(expense.importCategoryName);
-      if (!importKey) return expense;
-
-      if (preset.categoryMappings && preset.categoryMappings[importKey]) {
-        const targetCategoryId = preset.categoryMappings[importKey];
-        const targetCategory = categories.find(c => c.id === targetCategoryId);
-        if (targetCategory) {
-          return {
-            ...expense,
-            categoryId: targetCategory.id,
-            finalCategoryName: targetCategory.name,
-          };
-        }
-      }
-
-      const overrideCategoryName = preset.categoryOverrides[importKey];
-      if (!overrideCategoryName) return expense;
-      const targetCategory = categories.find(c => c.name.toLowerCase() === overrideCategoryName.toLowerCase());
-      if (!targetCategory) return expense;
-
-      return {
-        ...expense,
-        categoryId: targetCategory.id,
-        finalCategoryName: targetCategory.name,
-      };
-    });
-  };
   
   const handleSingleSave = () => {
     if (!name || !amount || !categoryId || parseFloat(amount) <= 0 || !date) {
@@ -167,19 +113,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       reader.onload = (e) => {
         const content = e.target?.result as string;
         const detectedDelimiter = detectDelimiter(content);
-        const detectedHeaders = getCsvHeaders(content, detectedDelimiter);
+        const csvHeaders = getCsvHeaders(content, detectedDelimiter);
+        const presets = loadMappingPresets();
         setCsvContent(content);
         setDelimiter(detectedDelimiter);
-        setHeaders(detectedHeaders);
-        setMapping(suggestMapping(detectedHeaders));
-        const matchedPreset = findPresetByHeaders(mappingPresets, detectedHeaders);
-        if (matchedPreset) {
-          setSelectedPresetId(matchedPreset.id);
-          setMapping(matchedPreset.mapping);
-          setDelimiter(matchedPreset.delimiter);
-        } else {
-          setSelectedPresetId('');
-        }
+        setHeaders(csvHeaders);
+        setMappingPresets(presets);
+        // Do not auto-apply; allow user to select and explicitly apply the preset
+        const matchedPreset = findPresetByHeaders(presets, csvHeaders);
+        setSelectedPresetId(matchedPreset ? matchedPreset.id : '');
         setSelectedExpenseIds(new Set());
         setBulkCategoryId('');
       };
@@ -194,12 +136,12 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     setParsedExpenses([]);
     try {
       const result = await parseCsvExpenses(csvContent, categories);
-      
+
       // Extract raw CSV categories for mapping consistency
       const csvRows = parseCsvRecords(csvContent, delimiter);
       const csvHeaders = getCsvHeaders(csvContent, delimiter);
       const csvCategoryColumnIndex = csvHeaders.findIndex(h => h.toLowerCase().includes('category'));
-      
+
       const expensesToReview: ExpenseToReview[] = result.map((exp, index) => {
           const importCategoryName = exp.categoryName?.trim();
           const category = categories.find(c => c.name.toLowerCase() === importCategoryName?.toLowerCase());
@@ -221,8 +163,7 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
             finalCategoryName: category?.name || importCategoryName,
           };
       });
-      const withOverrides = selectedPresetId ? applyPresetOverrides(expensesToReview, selectedPresetId) : expensesToReview;
-      setParsedExpenses(withOverrides);
+      setParsedExpenses(expensesToReview);
       setSelectedExpenseIds(new Set());
     } catch (e: any) {
       setError(e.message || 'An unknown error occurred.');
@@ -231,53 +172,56 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     }
   };
 
-  const handleMappedParse = () => {
-    if (!csvContent.trim()) return;
-    if (!mapping.dateColumn || !mapping.descriptionColumn || !mapping.amountColumn) {
-      setError('Date, description, and amount columns are required for mapped parsing.');
-      return;
-    }
+  const handleApplyPreset = () => {
+    if (!selectedPresetId) return;
+    const preset = mappingPresets.find(p => p.id === selectedPresetId);
+    if (!preset) return;
+    // If there are no parsed expenses yet, build them from the CSV using the preset mapping
+    if (parsedExpenses.length === 0) {
+      if (!csvContent.trim()) return;
+      const useDelimiter = preset.delimiter || delimiter;
+      const csvRows = parseCsvRecords(csvContent, useDelimiter);
+      const csvHeaders = getCsvHeaders(csvContent, useDelimiter);
 
-    try {
-      setError('');
-      const rows = parseCsvRecords(csvContent, delimiter);
-      const parsed = convertMappedCsvToExpenses(rows, mapping, categories);
-      const parsedExpensesWithCategories = parsed.map((exp, index) => {
-        const category = categories.find(c => c.name.toLowerCase() === exp.categoryName?.toLowerCase());
-        
-        // Extract raw CSV category value if column is mapped
+      // Use preset mapping if available, otherwise fall back to suggested mapping
+      let mapping = preset.mapping;
+      if (!mapping || !mapping.dateColumn || !mapping.descriptionColumn || !mapping.amountColumn) {
+        const suggested = suggestMapping(csvHeaders);
+        mapping = { ...mapping, ...suggested };
+      }
+
+      const parsed = convertMappedCsvToExpenses(csvRows, mapping, categories);
+
+      const csvCategoryColumnIndex = csvHeaders.findIndex(h => h.toLowerCase().includes('category'));
+      const expensesToReview: ExpenseToReview[] = parsed.map((exp, index) => {
+        const importCategoryName = exp.categoryName?.trim();
+        const category = categories.find(c => c.name.toLowerCase() === importCategoryName?.toLowerCase());
         let csvCategoryName: string | undefined;
-        if (mapping.categoryColumn && rows[index]) {
-          csvCategoryName = rows[index][mapping.categoryColumn]?.trim();
+        if (csvCategoryColumnIndex >= 0 && csvRows[index]) {
+          const categoryColumnName = csvHeaders[csvCategoryColumnIndex];
+          csvCategoryName = csvRows[index][categoryColumnName]?.trim();
         }
-        
         return {
           name: exp.name,
           amount: exp.amount,
           date: exp.date,
           categoryId: category?.id,
-          importCategoryName: exp.categoryName,
+          importCategoryName,
           csvCategoryName,
-          finalCategoryName: category?.name || exp.categoryName,
+          finalCategoryName: category?.name || importCategoryName,
         };
       });
-      const withOverrides = selectedPresetId ? applyPresetOverrides(parsedExpensesWithCategories, selectedPresetId) : parsedExpensesWithCategories;
-      setParsedExpenses(withOverrides);
-      setSelectedExpenseIds(new Set());
-      if (parsed.length === 0) {
-        setError('No valid expenses were parsed. Check mapping or CSV format.');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to parse CSV using the selected mapping.');
-    }
-  };
 
-  const handleParse = async () => {
-    if (bulkParseMode === 'ai') {
-      await handleAiParse();
-    } else {
-      handleMappedParse();
+      // Apply preset mappings/overrides to newly built parsed rows
+      const updated = applyPresetToParsedRows(expensesToReview as any[], preset, categories) as ExpenseToReview[];
+      setParsedExpenses(updated);
+      setSelectedExpenseIds(new Set());
+      return;
     }
+
+    const updated = applyPresetToParsedRows(parsedExpenses as any[], preset, categories) as ExpenseToReview[];
+    setParsedExpenses(updated);
+    setSelectedExpenseIds(new Set());
   };
 
   const buildCategoryMappings = (): { mappings: Record<string, string>; categoryOverrides: Record<string, string>; csvCategoryNames: string[] } => {
@@ -288,8 +232,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     parsedExpenses.forEach(expense => {
       if (!expense.categoryId) return;
 
-      const importKey = normalizeMappingKey(expense.importCategoryName);
-      const csvKey = normalizeMappingKey(expense.csvCategoryName);
+      const importKey = expense.importCategoryName?.trim().toLowerCase();
+      const csvKey = expense.csvCategoryName?.trim().toLowerCase();
 
       if (importKey) {
         mappings[importKey] = expense.categoryId;
@@ -315,8 +259,8 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
       setError('Enter a preset name before saving.');
       return;
     }
-    if (!mapping.dateColumn || !mapping.descriptionColumn || !mapping.amountColumn) {
-      setError('Map date, description, and amount columns before saving a preset.');
+    if (headers.length === 0) {
+      setError('Upload a CSV and parse with AI before saving a mapping.');
       return;
     }
 
@@ -324,31 +268,25 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     const preset: CsvMappingPreset = {
       id: `preset-${Date.now()}`,
       name: newPresetName.trim(),
-      mapping,
+      mapping: { dateColumn: '', descriptionColumn: '', amountColumn: '' },
       delimiter,
       headerSignature: createHeaderSignature(headers),
       categoryOverrides,
       categoryMappings: mappings,
       csvCategoryNames,
     };
-    const updated = [...mappingPresets, preset];
-    setMappingPresets(updated);
-    saveMappingPresets(updated);
+    const updatedPresets = [...mappingPresets, preset];
+    setMappingPresets(updatedPresets);
+    saveMappingPresets(updatedPresets);
     setSelectedPresetId(preset.id);
     setNewPresetName('');
+    setError('');
   };
 
-  const handleApplyPreset = (presetId: string) => {
-    setSelectedPresetId(presetId);
-    const preset = mappingPresets.find(p => p.id === presetId);
-    if (!preset) return;
-    setMapping(preset.mapping);
-    setDelimiter(preset.delimiter);
-    if (parsedExpenses.length > 0) {
-      setParsedExpenses(applyPresetOverrides(parsedExpenses, presetId));
-    }
+  const handleParse = async () => {
+    await handleAiParse();
   };
-  
+
   const handleBulkSave = () => {
     const expensesToSave = parsedExpenses
         .map(exp => {
@@ -425,35 +363,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
     setBulkCategoryId('');
   };
 
-  const handleSaveAiMapping = () => {
-    if (!newPresetName.trim()) {
-      setError('Enter a mapping name before saving.');
-      return;
-    }
-    if (headers.length === 0) {
-      setError('Upload a CSV and parse with AI before saving a mapping.');
-      return;
-    }
-
-    const { mappings, categoryOverrides, csvCategoryNames } = buildCategoryMappings();
-    const preset: CsvMappingPreset = {
-      id: `preset-${Date.now()}`,
-      name: newPresetName.trim(),
-      mapping,
-      delimiter,
-      headerSignature: createHeaderSignature(headers),
-      categoryOverrides,
-      categoryMappings: mappings,
-      csvCategoryNames,
-    };
-    const updatedPresets = [...mappingPresets, preset];
-    setMappingPresets(updatedPresets);
-    saveMappingPresets(updatedPresets);
-    setSelectedPresetId(preset.id);
-    setNewPresetName('');
-    setError('');
-  };
-
   const headerActions = (
     <button onClick={() => setIsFullScreen(!isFullScreen)} className="text-slate-400 hover:text-white transition-colors" aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}>
         {isFullScreen ? (
@@ -527,78 +436,6 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
                   <label className="block text-sm font-medium text-slate-400 mb-1">Upload CSV File</label>
                   <input type="file" accept=".csv" onChange={handleFileChange} className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700"/>
                 </div>
-                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Parsing Mode</label>
-                    <select
-                      value={bulkParseMode}
-                      onChange={e => setBulkParseMode(e.target.value as BulkParseMode)}
-                      className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
-                    >
-                      <option value="mapped">Mapped Parser (fast and consistent)</option>
-                      <option value="ai">AI Parser (best for messy files)</option>
-                    </select>
-                  </div>
-                  {bulkParseMode === 'mapped' && (
-                    <div>
-                      <label className="block text-sm font-medium text-slate-400 mb-1">Saved Mapping Preset</label>
-                      <select
-                        value={selectedPresetId}
-                        onChange={e => handleApplyPreset(e.target.value)}
-                        className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2"
-                      >
-                        <option value="">No preset selected</option>
-                        {mappingPresets.map(preset => (
-                          <option key={preset.id} value={preset.id}>{preset.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-                {bulkParseMode === 'mapped' && headers.length > 0 && (
-                  <div className="mt-4 p-3 rounded-lg border border-slate-700 bg-slate-900/40 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1">Date Column</label>
-                        <select value={mapping.dateColumn} onChange={e => setMapping(prev => ({ ...prev, dateColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
-                          <option value="">Select column</option>
-                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1">Description Column</label>
-                        <select value={mapping.descriptionColumn} onChange={e => setMapping(prev => ({ ...prev, descriptionColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
-                          <option value="">Select column</option>
-                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1">Amount Column</label>
-                        <select value={mapping.amountColumn} onChange={e => setMapping(prev => ({ ...prev, amountColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
-                          <option value="">Select column</option>
-                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1">Category Column (Optional)</label>
-                        <select value={mapping.categoryColumn || ''} onChange={e => setMapping(prev => ({ ...prev, categoryColumn: e.target.value }))} className="w-full bg-slate-700 border-slate-600 text-white rounded-md p-2">
-                          <option value="">None</option>
-                          {headers.map(header => <option key={header} value={header}>{header}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex flex-col md:flex-row md:items-center gap-2">
-                      <input
-                        type="text"
-                        value={newPresetName}
-                        onChange={e => setNewPresetName(e.target.value)}
-                        className="flex-1 bg-slate-700 border-slate-600 text-white rounded-md p-2"
-                        placeholder="Save this mapping as preset (e.g., Chase Checking)"
-                      />
-                      <Button variant="secondary" onClick={handleSavePreset}>Save Preset</Button>
-                    </div>
-                  </div>
-                )}
                 <div className="flex justify-end mt-4">
                   <Button onClick={handleParse} disabled={isLoading || !csvContent.trim()}>
                     {isLoading ? (
@@ -606,8 +443,15 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
                         <Spinner size="sm" className="mr-2" />
                         Parsing...
                       </span>
-                    ) : bulkParseMode === 'ai' ? 'Parse CSV with AI' : 'Parse CSV with Mapping'}
+                    ) : 'Parse CSV with AI'}
                   </Button>
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                  <select value={selectedPresetId} onChange={e => setSelectedPresetId(e.target.value)} className="bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm">
+                    <option value="">Select saved mapping...</option>
+                    {mappingPresets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                  <Button variant="secondary" onClick={handleApplyPreset} disabled={!selectedPresetId}>Apply Saved Mapping</Button>
                 </div>
             </div>
 
@@ -637,19 +481,11 @@ export const AddExpenseModal: React.FC<AddExpenseModalProps> = ({ isOpen, onClos
                     <Button variant="secondary" onClick={handleApplyBulkCategory} disabled={!bulkCategoryId || selectedExpenseIds.size === 0}>
                       Apply to Selected ({selectedExpenseIds.size})
                     </Button>
-                  </div>
-                  {bulkParseMode === 'ai' && (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        value={newPresetName}
-                        onChange={e => setNewPresetName(e.target.value)}
-                        className="flex-1 min-w-60 bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm"
-                        placeholder="Save AI mapping name (e.g., Amex Monthly Import)"
-                      />
-                      <Button variant="secondary" onClick={handleSaveAiMapping}>Save Mapping</Button>
+                    <div className="ml-auto flex items-center gap-2">
+                      <input value={newPresetName} onChange={e => setNewPresetName(e.target.value)} placeholder="Preset name" className="bg-slate-700 border-slate-600 text-white rounded-md p-2 text-sm" />
+                      <Button variant="secondary" onClick={handleSavePreset} disabled={!newPresetName.trim()}>Save Mapping</Button>
                     </div>
-                  )}
+                  </div>
                 </div>
                 <div className={`space-y-2 pr-2 overflow-y-auto ${isFullScreen ? 'flex-grow' : 'max-h-60'}`}>
                   {parsedExpenses.map((exp, index) => (
