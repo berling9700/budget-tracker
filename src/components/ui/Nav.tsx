@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-type Page = 'dashboard' | 'budgets' | 'assets';
+type Page = 'budgets';
 
 interface NavProps {
   currentPage: Page;
@@ -10,9 +10,7 @@ interface NavProps {
 
 export const Nav: React.FC<NavProps> = ({ currentPage, onPageChange }) => {
   const navItems: { id: Page, label: string }[] = [
-    { id: 'dashboard', label: 'Dashboard' },
     { id: 'budgets', label: 'Budgets' },
-    { id: 'assets', label: 'Assets' },
   ];
   
   return (

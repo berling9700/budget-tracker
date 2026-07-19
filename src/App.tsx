@@ -1,16 +1,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Budget, Expense, Category, Asset, Holding, Liability, NetWorthSnapshot } from '../types';
+import { Budget, Expense, Category } from '../types';
 import { BudgetSetupModal } from './components/modals/BudgetSetupModal';
 import { AddExpenseModal } from './components/modals/AddExpenseModal';
-import { AddAssetModal } from './components/modals/AddInvestmentAccountModal';
 import { Button } from './components/ui/Button';
 import { Dropdown, DropdownItem } from './components/ui/Dropdown';
 import { Spinner } from './components/ui/Spinner';
 import { Nav } from './components/ui/Nav';
 import { BudgetView } from './components/BudgetView';
-import { AssetsDashboard } from './components/InvestmentsDashboard';
-import { NetWorthDashboard } from './components/NetWorthDashboard';
 import {
   clearLegacyBudgetData,
   loadAppData,
@@ -22,50 +19,17 @@ import {
 
 type ModalType = 'setup' | 'addExpense' | 'addAsset' | 'settings' | null;
 type ExpenseData = Omit<Expense, 'id' | 'categoryId'> & { categoryId?: string; categoryName?: string };
-type Page = 'dashboard' | 'budgets' | 'assets';
+type Page = 'budgets';
 type AppNoticeType = 'success' | 'warning' | 'error' | 'info';
 
 interface AppSettings {
     alphaVantageApiKey?: string;
 }
 
-const calculateCurrentNetWorth = (currentAssets: Asset[], currentLiabilities: Liability[]): number => {
-    const totalAssets = currentAssets.reduce((sum, asset) => {
-        if (asset.holdings) {
-            return sum + asset.holdings.reduce((hSum, h) => hSum + h.shares * h.currentPrice, 0);
-        }
-        return sum + (asset.value || 0);
-    }, 0);
-    const totalLiabilities = currentLiabilities.reduce((sum, l) => sum + l.amount, 0);
-    return totalAssets - totalLiabilities;
-};
-
-const updateNetWorthHistory = (currentHistory: NetWorthSnapshot[], currentAssets: Asset[], currentLiabilities: Liability[]): NetWorthSnapshot[] => {
-    const newNetWorth = calculateCurrentNetWorth(currentAssets, currentLiabilities);
-    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
-    
-    const lastSnapshot = currentHistory.length > 0 ? currentHistory[currentHistory.length - 1] : null;
-    
-    // Avoid creating an initial zero-value entry if everything is empty
-    if (newNetWorth === 0 && currentHistory.length === 0 && currentAssets.length === 0 && currentLiabilities.length === 0) {
-        return [];
-    }
-    
-    // If the latest snapshot is for today, update its value (if it changed)
-    if (lastSnapshot && lastSnapshot.date === today) {
-        if (lastSnapshot.netWorth.toFixed(2) === newNetWorth.toFixed(2)) return currentHistory; 
-        const newHistory = [...currentHistory];
-        newHistory[newHistory.length - 1] = { date: today, netWorth: newNetWorth };
-        return newHistory;
-    } else {
-        // If there's no snapshot for today, add a new one, but only if value changed from last time
-        if (lastSnapshot && lastSnapshot.netWorth.toFixed(2) === newNetWorth.toFixed(2)) return currentHistory;
-        return [...currentHistory, { date: today, netWorth: newNetWorth }];
-    }
-}
+// Asset and net-worth helpers removed for budget-only app
 
 const App: React.FC = () => {
-  const [page, setPage] = useState<Page>('dashboard');
+  const [page, setPage] = useState<Page>('budgets');
   
   // Budget State
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -74,15 +38,7 @@ const App: React.FC = () => {
   const [budgetToEdit, setBudgetToEdit] = useState<Budget | null>(null);
   const [viewMonth, setViewMonth] = useState<number>(0); // 0 for annual, 1-12 for month
 
-  // Asset State
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [assetToEdit, setAssetToEdit] = useState<Asset | null>(null);
-
-  // Liabilities State
-  const [liabilities, setLiabilities] = useState<Liability[]>([]);
-
-  // Net Worth History State
-  const [netWorthHistory, setNetWorthHistory] = useState<NetWorthSnapshot[]>([]);
+  // No asset/liability/net-worth state in budget-only app
 
   // Settings State
   const [settings, setSettings] = useState<AppSettings>({});
@@ -97,9 +53,6 @@ const App: React.FC = () => {
       const appData = loadAppData();
       if (appData) {
           setBudgets(appData.budgets || []);
-          setAssets(appData.assets || appData.investmentAccounts || []); // Migration from investmentAccounts
-          setLiabilities(appData.liabilities || []);
-          setNetWorthHistory(appData.netWorthHistory || []);
           const savedActiveId = appData.activeBudgetId;
           if (savedActiveId && (appData.budgets || []).find((b: Budget) => b.id === savedActiveId)) {
             setActiveBudgetId(savedActiveId);
@@ -118,11 +71,11 @@ const App: React.FC = () => {
         const parsedBudgets = legacyData.budgets;
         setBudgets(parsedBudgets);
         if (legacyData.activeBudgetId && parsedBudgets.find((b: Budget) => b.id === legacyData.activeBudgetId)) {
-            setActiveBudgetId(legacyData.activeBudgetId);
+          setActiveBudgetId(legacyData.activeBudgetId);
         } else if (parsedBudgets.length > 0) {
-            setActiveBudgetId(parsedBudgets[0].id);
+          setActiveBudgetId(parsedBudgets[0].id);
         }
-        saveAppData({ budgets: parsedBudgets, activeBudgetId: legacyData.activeBudgetId, assets: [], liabilities: [], netWorthHistory: [] });
+        saveAppData({ budgets: parsedBudgets, activeBudgetId: legacyData.activeBudgetId });
         clearLegacyBudgetData();
       }
     } catch (error) {
@@ -134,16 +87,9 @@ const App: React.FC = () => {
   
   const activeBudget = useMemo(() => budgets.find(b => b.id === activeBudgetId), [budgets, activeBudgetId]);
 
-  const headerTitle = useMemo(() => {
-    switch (page) {
-      case 'dashboard': return 'Your Financial Overview';
-      case 'assets': return 'Your Assets';
-      case 'budgets': return activeBudget ? activeBudget.name : 'Create a budget to get started';
-      default: return '';
-    }
-  }, [page, activeBudget]);
+  const headerTitle = useMemo(() => activeBudget ? activeBudget.name : 'Create a budget to get started', [activeBudget]);
 
-  const saveAllData = useCallback((data: { budgets: Budget[], activeBudgetId: string | null, assets: Asset[], liabilities: Liability[], netWorthHistory: NetWorthSnapshot[] }) => {
+  const saveAllData = useCallback((data: { budgets: Budget[], activeBudgetId: string | null }) => {
     saveAppData(data);
   }, []);
 
@@ -151,22 +97,10 @@ const App: React.FC = () => {
     setBudgets(newBudgets);
     const finalActiveId = newActiveId !== undefined ? newActiveId : activeBudgetId;
     setActiveBudgetId(finalActiveId);
-    saveAllData({ budgets: newBudgets, activeBudgetId: finalActiveId, assets, liabilities, netWorthHistory });
-  }, [activeBudgetId, assets, liabilities, netWorthHistory, saveAllData]);
+    saveAllData({ budgets: newBudgets, activeBudgetId: finalActiveId });
+  }, [activeBudgetId, saveAllData]);
 
-  const saveAssets = useCallback((newAssets: Asset[]) => {
-      const newHistory = updateNetWorthHistory(netWorthHistory, newAssets, liabilities);
-      setAssets(newAssets);
-      setNetWorthHistory(newHistory);
-      saveAllData({ budgets, activeBudgetId, assets: newAssets, liabilities, netWorthHistory: newHistory });
-  }, [budgets, activeBudgetId, liabilities, netWorthHistory, saveAllData]);
-
-  const saveLiabilities = useCallback((newLiabilities: Liability[]) => {
-      const newHistory = updateNetWorthHistory(netWorthHistory, assets, newLiabilities);
-      setLiabilities(newLiabilities);
-      setNetWorthHistory(newHistory);
-      saveAllData({ budgets, activeBudgetId, assets, liabilities: newLiabilities, netWorthHistory: newHistory });
-  }, [budgets, activeBudgetId, assets, netWorthHistory, saveAllData]);
+    // Asset/liability helpers removed for budget-only app
 
   const saveSettings = useCallback((newSettings: AppSettings) => {
     setSettings(newSettings);
@@ -325,29 +259,13 @@ const App: React.FC = () => {
     setActiveModal('setup');
   }
 
-  // ASSET HANDLERS
-  const handleSaveAsset = (assetData: Omit<Asset, 'id'>) => {
-    if (assetToEdit) {
-        const updatedAssets = assets.map(asset => asset.id === assetToEdit.id ? { ...assetToEdit, ...assetData } : asset);
-        saveAssets(updatedAssets);
-    } else {
-        const newAsset: Asset = { ...assetData, id: `asset-${Date.now()}` };
-        saveAssets([...assets, newAsset]);
-    }
-    setActiveModal(null);
-    setAssetToEdit(null);
-  };
-
-  const handleEditAsset = (asset: Asset) => {
-    setAssetToEdit(asset);
-    setActiveModal('addAsset');
-  };
+  // Asset handlers removed
 
 
   // DATA IMPORT/EXPORT
   const handleExportData = () => {
-    const data = { budgets, activeBudgetId, assets, liabilities, settings, netWorthHistory };
-    if (budgets.length === 0 && assets.length === 0 && liabilities.length === 0) {
+    const data = { budgets, activeBudgetId, settings };
+    if (budgets.length === 0) {
         setAppNotice({ type: 'info', message: 'No data to export.' });
         return;
     }
@@ -370,26 +288,18 @@ const App: React.FC = () => {
             const text = e.target?.result as string;
             const importedData = JSON.parse(text);
             const importedBudgets = importedData.budgets || [];
-            // Handle migration from old 'investmentAccounts' key
-            const importedAssets = importedData.assets || importedData.investmentAccounts || [];
-            const importedLiabilities = importedData.liabilities || [];
-            const importedNetWorthHistory = importedData.netWorthHistory || [];
             const importedSettings = importedData.settings || {};
 
-
-            if (!Array.isArray(importedBudgets) || !Array.isArray(importedAssets) || !Array.isArray(importedLiabilities)) {
-                 throw new Error("Invalid file format.");
+            if (!Array.isArray(importedBudgets)) {
+               throw new Error("Invalid file format.");
             }
             if (window.confirm("This will overwrite all your current data, including settings. Are you sure you want to continue?")) {
-                const newActiveId = importedData.activeBudgetId || (importedBudgets.length > 0 ? importedBudgets[0].id : null);
-                setBudgets(importedBudgets);
-                setAssets(importedAssets);
-                setLiabilities(importedLiabilities);
-                setNetWorthHistory(importedNetWorthHistory);
-                setActiveBudgetId(newActiveId);
-                saveAllData({ budgets: importedBudgets, activeBudgetId: newActiveId, assets: importedAssets, liabilities: importedLiabilities, netWorthHistory: importedNetWorthHistory });
-                saveSettings(importedSettings);
-                setAppNotice({ type: 'success', message: 'Data imported successfully.' });
+              const newActiveId = importedData.activeBudgetId || (importedBudgets.length > 0 ? importedBudgets[0].id : null);
+              setBudgets(importedBudgets);
+              setActiveBudgetId(newActiveId);
+              saveAllData({ budgets: importedBudgets, activeBudgetId: newActiveId });
+              saveSettings(importedSettings);
+              setAppNotice({ type: 'success', message: 'Data imported successfully.' });
             }
         } catch (error: any) {
             setAppNotice({ type: 'error', message: `Failed to import data: ${error.message}` });
@@ -442,9 +352,9 @@ const App: React.FC = () => {
                     <select
                         value={activeBudgetId || ''}
                         onChange={e => {
-                            const newActiveId = e.target.value;
-                            setActiveBudgetId(newActiveId);
-                            saveAllData({ budgets, activeBudgetId: newActiveId, assets, liabilities, netWorthHistory });
+                          const newActiveId = e.target.value;
+                          setActiveBudgetId(newActiveId);
+                          saveAllData({ budgets, activeBudgetId: newActiveId });
                         }}
                         className="bg-slate-700 border-slate-600 text-white rounded-md p-2 h-10"
                     >
@@ -463,14 +373,7 @@ const App: React.FC = () => {
                     </Button>
                 )}
 
-                {page === 'assets' &&
-                    <Button onClick={() => {
-                        setAssetToEdit(null);
-                        setActiveModal('addAsset');
-                    }}>
-                        Add Asset
-                    </Button>
-                }
+                
 
                 <input type="file" ref={importInputRef} style={{ display: 'none' }} onChange={handleImportFile} accept=".json" />
                 <Dropdown trigger={
@@ -506,16 +409,6 @@ const App: React.FC = () => {
         <Nav currentPage={page} onPageChange={setPage} />
 
         <main>
-          {page === 'dashboard' && (
-            <NetWorthDashboard
-                assets={assets}
-                liabilities={liabilities}
-                onSaveLiabilities={saveLiabilities}
-                activeBudget={activeBudget}
-                netWorthHistory={netWorthHistory}
-            />
-          )}
-
           {page === 'budgets' && (
             <BudgetView
               activeBudget={activeBudget}
@@ -530,14 +423,6 @@ const App: React.FC = () => {
                   setBudgetToEdit(null);
                   setActiveModal('setup');
               }}
-            />
-          )}
-
-          {page === 'assets' && (
-            <AssetsDashboard
-              assets={assets}
-              onSaveAssets={saveAssets}
-              onEditAsset={handleEditAsset}
             />
           )}
         </main>
@@ -564,15 +449,7 @@ const App: React.FC = () => {
         />
       )}
 
-      <AddAssetModal
-        isOpen={activeModal === 'addAsset'}
-        onClose={() => {
-            setActiveModal(null);
-            setAssetToEdit(null);
-        }}
-        onSave={handleSaveAsset}
-        initialData={assetToEdit}
-      />
+      {/* AddAssetModal removed for budget-only app */}
 
     </div>
   );

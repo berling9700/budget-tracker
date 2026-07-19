@@ -1,27 +1,3 @@
-export interface Holding {
-  id: string;
-  ticker: string;
-  name: string;
-  shares: number;
-  purchasePrice: number;
-  currentPrice: number;
-}
-
-export type AssetType = 'Brokerage' | 'Retirement' | 'HSA' | 'Cash & Savings' | 'Real Estate' | 'Vehicle' | 'Other';
-
-export interface Asset {
-  id: string;
-  name: string;
-  type: AssetType;
-  value?: number; // For single-value assets
-  holdings?: Holding[]; // For accounts with multiple holdings
-}
-
-export interface Liability {
-  id: string;
-  name: string;
-  amount: number;
-}
 
 export interface Expense {
   id: string;
@@ -43,9 +19,4 @@ export interface Budget {
   year: number;
   categories: Category[];
   expenses: Expense[];
-}
-
-export interface NetWorthSnapshot {
-  date: string; // ISO string in 'YYYY-MM-DD' format
-  netWorth: number;
 }

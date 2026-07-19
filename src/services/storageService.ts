@@ -1,4 +1,4 @@
-import { Asset, Budget, Liability, NetWorthSnapshot } from '../../types';
+import { Budget } from '../../types';
 
 const APP_DATA_KEY = 'budget-tracker-app-data';
 const SETTINGS_KEY = 'budget-tracker-settings';
@@ -9,15 +9,12 @@ const CURRENT_DATA_VERSION = 1;
 export interface AppDataPayload {
   budgets: Budget[];
   activeBudgetId: string | null;
-  assets: Asset[];
-  liabilities: Liability[];
-  netWorthHistory: NetWorthSnapshot[];
+  // kept minimal for budget-only app
 }
 
 interface PersistedAppData extends AppDataPayload {
   version?: number;
   updatedAt?: string;
-  investmentAccounts?: Asset[];
 }
 
 interface LegacyBudgetData {

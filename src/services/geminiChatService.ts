@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { Asset, Budget, Liability } from '../../types';
+import { Budget } from '../../types';
 
 if (!process.env.API_KEY) {
   console.warn("API_KEY environment variable not set. AI features will be disabled.");
@@ -10,11 +10,10 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 const getPageContextInstruction = (page: string): string => {
     switch(page) {
         case 'dashboard':
-            return `The user is on the main dashboard. Provide a holistic overview of their financial health. Analyze their net worth (assets vs. liabilities) and their annual budget performance. Suggest 2-3 high-level, actionable steps they could take to improve their financial situation.`;
+          return `The user is on the main dashboard. Provide a holistic overview of their financial health and their annual budget performance. Suggest 2-3 high-level, actionable steps they could take to improve their financial situation.`;
         case 'budgets':
             return `The user is viewing their budget. Analyze their spending habits based on the provided budget data. Identify categories where they are overspending or where there are potential savings. Offer specific, practical tips for reducing expenses in those categories.`;
-        case 'assets':
-            return `The user is on the assets page. Review their list of assets. Based on their holdings and asset types, suggest potential areas for diversification or growth. IMPORTANT: Do not give specific stock picks (e.g., "buy AAPL"). Instead, suggest general strategies (e.g., "Consider diversifying into international ETFs," or "Your cash savings are high, you might consider investing some of it for long-term growth if you have a high risk tolerance.").`;
+        // 'assets' page removed in budget-only mode
         default:
             return `Provide general financial advice based on the user's query and their overall financial data.`;
     }
@@ -24,8 +23,6 @@ export const getFinancialAdvice = async (
   query: string,
   page: string,
   budgets: Budget[],
-  assets: Asset[],
-  liabilities: Liability[],
 ): Promise<string> => {
   if (!process.env.API_KEY) {
     throw new Error("API Key for Gemini is not configured.");
@@ -41,15 +38,7 @@ export const getFinancialAdvice = async (
     ${JSON.stringify(budgets, null, 2)}
     \`\`\`
 
-    **Assets:**
-    \`\`\`json
-    ${JSON.stringify(assets, null, 2)}
-    \`\`\`
-
-    **Liabilities:**
-    \`\`\`json
-    ${JSON.stringify(liabilities, null, 2)}
-    \`\`\`
+    (Asset/liability data omitted — app is budget-only)
 
     ---
 
@@ -63,7 +52,7 @@ export const getFinancialAdvice = async (
   try {
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: prompt,
+      contents: prompt,
         config: {
             systemInstruction,
             temperature: 0.7,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Asset, Budget, Liability } from '../../../types';
+import { Budget } from '../../../types';
 import { getFinancialAdvice } from '../../services/geminiChatService';
 import { Spinner } from './Spinner';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -12,11 +12,9 @@ interface Message {
 interface ChatbotProps {
     page: string;
     budgets: Budget[];
-    assets: Asset[];
-    liabilities: Liability[];
 }
 
-export const Chatbot: React.FC<ChatbotProps> = ({ page, budgets, assets, liabilities }) => {
+export const Chatbot: React.FC<ChatbotProps> = ({ page, budgets }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
@@ -53,7 +51,7 @@ export const Chatbot: React.FC<ChatbotProps> = ({ page, budgets, assets, liabili
         setIsLoading(true);
 
         try {
-            const aiResponse = await getFinancialAdvice(userMessage, page, budgets, assets, liabilities);
+            const aiResponse = await getFinancialAdvice(userMessage, page, budgets);
             setMessages(prev => [...prev, { sender: 'ai', text: aiResponse }]);
         } catch (error: any) {
             setMessages(prev => [...prev, { sender: 'ai', text: `Sorry, I encountered an error: ${error.message}` }]);
